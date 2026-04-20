@@ -28,6 +28,7 @@ struct PaneTabStrip: View {
     let onSelectTab: (UUID) -> Void
     let onCreateTab: () -> Void
     let onCreateVCSTab: () -> Void
+    let onCreateWebViewTab: () -> Void
     let onCloseTab: (UUID) -> Void
     let onCloseOtherTabs: (UUID) -> Void
     let onCloseTabsToLeft: (UUID) -> Void
@@ -98,6 +99,10 @@ struct PaneTabStrip: View {
                     IconButton(symbol: symbol, accessibilityLabel: label, action: onToggleMaximize)
                         .help(shortcutTooltip("Toggle Maximize Pane", for: .toggleMaximizePane))
                 }
+                IconButton(symbol: "globe", size: 12, accessibilityLabel: "Open Browser") {
+                    onCreateWebViewTab()
+                }
+                .help("Open Browser")
                 IconButton(symbol: "square.split.2x1", accessibilityLabel: "Split Right") { onSplit(.horizontal) }
                     .help(shortcutTooltip("Split Right", for: .splitRight))
                 IconButton(symbol: "square.split.1x2", accessibilityLabel: "Split Down") { onSplit(.vertical) }
@@ -626,6 +631,7 @@ private struct TabCell: View {
         case .vcs: label += ", Source Control"
         case .editor: label += ", Editor"
         case .diffViewer: label += ", Diff Viewer"
+        case .webView: label += ", Browser"
         }
         if tab.isPinned { label += ", Pinned" }
         if hasUnread { label += ", Unread" }
@@ -650,7 +656,14 @@ private struct TabCell: View {
                 .font(.system(size: UIMetrics.fontBody, weight: .semibold))
         } else if tab.kind == .diffViewer {
             Image(systemName: "rectangle.split.2x1")
+<<<<<<< HEAD
                 .font(.system(size: UIMetrics.fontFootnote, weight: .semibold))
+=======
+                .font(.system(size: 11, weight: .semibold))
+        } else if tab.kind == .webView {
+            Image(systemName: "globe")
+                .font(.system(size: 12, weight: .semibold))
+>>>>>>> 2e520d5 (Add in-app browser tab)
         } else {
             Image(systemName: "terminal")
                 .font(.system(size: UIMetrics.fontBody, weight: .semibold))
