@@ -214,6 +214,8 @@ struct NativeMarkdownPreviewView: View {
     }
 
     private func handleScrollViewDidScroll(_ scrollView: NSScrollView) {
+        scrollView.refreshNativeMarkdownLinkInteractionsAfterScroll()
+
         let report = makeScrollReport(from: scrollView)
         latestScrollMetrics = NativeMarkdownScrollMetricsPreferenceKey.Value(
             contentMinY: -report.scrollTop,
