@@ -48,16 +48,13 @@ struct NativeMermaidBlockView: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Color(nsColor: palette.foreground).opacity(0.68))
                 Spacer()
-                Button {
+                NativeMermaidPreviewButton(
+                    title: "Open in Preview",
+                    systemImageName: "arrow.up.right.square",
+                    enabled: !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ) {
                     openDiagramInPreview()
-                } label: {
-                    Label("Open in Preview", systemImage: "arrow.up.right.square")
-                        .labelStyle(.titleAndIcon)
                 }
-                .buttonStyle(.borderless)
-                .font(.system(size: 11, weight: .medium))
-                .disabled(source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .pointingHandCursor(enabled: !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
 
             ZStack {
@@ -258,47 +255,135 @@ struct NativeMermaidBlockView: View {
     }
 }
 
-private extension View {
-    func pointingHandCursor(enabled: Bool = true) -> some View {
-        modifier(PointingHandCursorModifier(enabled: enabled))
+private struct NativeMermaidPreviewButton: NSViewRepresentable {
+    let title: String
+    let systemImageName: String
+    let enabled: Bool
+    let action: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(action: action)
+    }
+
+    func makeNSView(context: Context) -> PointingHandCursorButton {
+        let button = PointingHandCursorButton()
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.performAction)
+        button.setContentHuggingPriority(.required, for: .horizontal)
+        button.setContentCompressionResistancePriority(.required, for: .horizontal)
+        configure(button)
+        return button
+    }
+
+    func updateNSView(_ button: PointingHandCursorButton, context: Context) {
+        context.coordinator.action = action
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.performAction)
+        configure(button)
+    }
+
+    private func configure(_ button: PointingHandCursorButton) {
+        button.title = title
+        button.image = NSImage(systemSymbolName: systemImageName, accessibilityDescription: title)
+        button.imagePosition = .imageLeading
+        button.isBordered = false
+        button.bezelStyle = .regularSquare
+        button.setButtonType(.momentaryPushIn)
+        button.font = .systemFont(ofSize: 11, weight: .medium)
+        button.contentTintColor = .controlAccentColor
+        button.isEnabled = enabled
+        button.usesPointingHandCursor = enabled
+        button.sizeToFit()
+    }
+
+    final class Coordinator: NSObject {
+        var action: () -> Void
+
+        init(action: @escaping () -> Void) {
+            self.action = action
+        }
+
+        @objc
+        func performAction() {
+            action()
+        }
     }
 }
 
-private struct PointingHandCursorModifier: ViewModifier {
-    let enabled: Bool
-    @State private var cursorPushed = false
-
-    func body(content: Content) -> some View {
-        content
-            .onHover { hovering in
-                updateCursor(hovering: hovering)
-            }
-            .onChange(of: enabled) { _, enabled in
-                if !enabled { popCursorIfNeeded() }
-            }
-            .onDisappear {
-                popCursorIfNeeded()
-            }
+private final class PointingHandCursorButton: NSButton {
+    var usesPointingHandCursor = true {
+        didSet { refreshCursorState() }
     }
 
-    private func updateCursor(hovering: Bool) {
-        guard enabled else {
-            popCursorIfNeeded()
-            return
+    private var cursorTrackingArea: NSTrackingArea?
+
+    override var isEnabled: Bool {
+        didSet { refreshCursorState() }
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.acceptsMouseMovedEvents = true
+        refreshCursorState()
+    }
+
+    override func updateTrackingAreas() {
+        if let cursorTrackingArea {
+            removeTrackingArea(cursorTrackingArea)
         }
 
-        if hovering, !cursorPushed {
-            NSCursor.pointingHand.push()
-            cursorPushed = true
-        } else if !hovering {
-            popCursorIfNeeded()
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .mouseEnteredAndExited, .mouseMoved, .cursorUpdate],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        cursorTrackingArea = area
+        super.updateTrackingAreas()
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        guard shouldUsePointingHandCursor else { return }
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        updateTrackingAreas()
+        refreshCursorState()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        setPointingHandIfNeeded()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        setPointingHandIfNeeded()
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        if shouldUsePointingHandCursor {
+            NSCursor.pointingHand.set()
+        } else {
+            super.cursorUpdate(with: event)
         }
     }
 
-    private func popCursorIfNeeded() {
-        guard cursorPushed else { return }
-        NSCursor.pop()
-        cursorPushed = false
+    private var shouldUsePointingHandCursor: Bool {
+        usesPointingHandCursor && isEnabled
+    }
+
+    private func setPointingHandIfNeeded() {
+        guard shouldUsePointingHandCursor else { return }
+        NSCursor.pointingHand.set()
+    }
+
+    private func refreshCursorState() {
+        window?.invalidateCursorRects(for: self)
     }
 }
 
