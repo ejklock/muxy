@@ -28,6 +28,7 @@ struct NativeMarkdownPreviewView: View {
     @State private var latestScrollMetrics: NativeMarkdownScrollMetricsPreferenceKey.Value = NativeMarkdownScrollMetricsPreferenceKey
         .defaultValue
     @State private var scrollView: NSScrollView?
+    @State private var cursorCoordinator = NativeMarkdownCursorCoordinator()
     @State private var programmaticScrollSuppressionUntil: Date?
     @State private var lastAppliedFragmentRequestVersion: Int = -1
 
@@ -89,6 +90,7 @@ struct NativeMarkdownPreviewView: View {
                                 // Capture the NSScrollView backing SwiftUI's ScrollView so we can scroll
                                 // to arbitrary pixel offsets (required by scroll sync).
                                 scrollView = resolvedScrollView
+                                cursorCoordinator.attach(to: resolvedScrollView)
                                 handleScrollViewDidScroll(resolvedScrollView)
                                 applyPreferredScrollIfNeeded()
                             },
@@ -133,6 +135,9 @@ struct NativeMarkdownPreviewView: View {
                     applyFragmentScrollIfNeeded(renderUnits: renderUnits)
                 }
             }
+        }
+        .onDisappear {
+            cursorCoordinator.detach()
         }
         .onPreferenceChange(NativeMarkdownScrollMetricsPreferenceKey.self) { value in
             latestScrollMetrics = value
@@ -214,7 +219,7 @@ struct NativeMarkdownPreviewView: View {
     }
 
     private func handleScrollViewDidScroll(_ scrollView: NSScrollView) {
-        scrollView.refreshNativeMarkdownLinkInteractionsAfterScroll()
+        cursorCoordinator.scheduleUpdateAfterScroll()
 
         let report = makeScrollReport(from: scrollView)
         latestScrollMetrics = NativeMarkdownScrollMetricsPreferenceKey.Value(

@@ -500,7 +500,6 @@ struct NativeMarkdownSelectableTextBlockView: NSViewRepresentable {
         textView.autoresizingMask = [.width]
         applyLinkAttributes(to: textView)
         textView.textStorage?.setAttributedString(attributedString)
-        textView.refreshLinkCursorRects()
         return textView
     }
 
@@ -509,7 +508,6 @@ struct NativeMarkdownSelectableTextBlockView: NSViewRepresentable {
         applyLinkAttributes(to: textView)
         if textView.attributedString() != attributedString {
             textView.textStorage?.setAttributedString(attributedString)
-            textView.refreshLinkCursorRects()
         }
         textView.invalidateIntrinsicContentSize()
     }
@@ -555,7 +553,6 @@ final class NativeMarkdownSelectableTextView: NSTextView {
     var hoverLinkAttributes: [NSAttributedString.Key: Any] = [:]
     var nativeMarkdownCodeBackgroundColor: NSColor = .textBackgroundColor
     var nativeMarkdownCodeBorderColor: NSColor = .separatorColor
-    private var hoverTrackingArea: NSTrackingArea?
     private var hoveredLinkRange: NSRange?
 
     override var intrinsicContentSize: NSSize {
@@ -570,111 +567,30 @@ final class NativeMarkdownSelectableTextView: NSTextView {
         )
     }
 
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        window?.acceptsMouseMovedEvents = true
-        DispatchQueue.main.async { [weak self] in
-            self?.refreshLinkInteractionForCurrentMouseLocation()
-        }
-    }
-
     override func draw(_ dirtyRect: NSRect) {
         drawNativeMarkdownCodeBackgrounds(in: dirtyRect)
         super.draw(dirtyRect)
-    }
-
-    override func updateTrackingAreas() {
-        if let hoverTrackingArea {
-            removeTrackingArea(hoverTrackingArea)
-        }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.activeAlways, .mouseMoved, .mouseEnteredAndExited, .cursorUpdate],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        hoverTrackingArea = area
-        super.updateTrackingAreas()
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        updateHoveredLink(at: convert(event.locationInWindow, from: nil))
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        super.mouseMoved(with: event)
-        updateHoveredLink(at: convert(event.locationInWindow, from: nil))
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        super.mouseExited(with: event)
-        clearHoveredLink()
-    }
-
-    override func cursorUpdate(with event: NSEvent) {
-        let point = convert(event.locationInWindow, from: nil)
-        if linkRange(at: point) != nil {
-            NSCursor.pointingHand.set()
-        } else {
-            super.cursorUpdate(with: event)
-        }
-    }
-
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        addLinkCursorRects()
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         textContainer?.containerSize = NSSize(width: max(0, newSize.width), height: .greatestFiniteMagnitude)
         invalidateIntrinsicContentSize()
-        updateTrackingAreas()
-        refreshLinkCursorRects()
-    }
-
-    override func setBoundsSize(_ newSize: NSSize) {
-        super.setBoundsSize(newSize)
-        updateTrackingAreas()
-        refreshLinkCursorRects()
     }
 
     override func didChangeText() {
         super.didChangeText()
         invalidateIntrinsicContentSize()
-        refreshLinkCursorRects()
     }
 
-    func refreshLinkCursorRects() {
-        guard let window else { return }
-        window.invalidateCursorRects(for: self)
+    func nativeMarkdownLinkRange(atWindowPoint windowPoint: NSPoint) -> NSRange? {
+        let point = convert(windowPoint, from: nil)
+        guard bounds.contains(point) else { return nil }
+        return linkRange(at: point)
     }
 
-    func refreshLinkInteractionForCurrentMouseLocation() {
-        guard let window else { return }
-        window.acceptsMouseMovedEvents = true
-        refreshLinkCursorRects()
-
-        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
-        guard bounds.contains(point) else {
-            clearHoveredLink()
-            return
-        }
-
-        updateHoveredLink(at: point)
-    }
-
-    func clearLinkHoverForExternalLayoutChange() {
-        clearHoveredLink()
-    }
-
-    private func updateHoveredLink(at point: NSPoint) {
-        let linkRange = linkRange(at: point)
-
+    func nativeMarkdownSetHoveredLinkRange(_ linkRange: NSRange?) {
         guard linkRange != hoveredLinkRange else {
-            if linkRange != nil { NSCursor.pointingHand.set() }
             return
         }
 
@@ -682,7 +598,6 @@ final class NativeMarkdownSelectableTextView: NSTextView {
         if let linkRange {
             textStorage?.addAttributes(hoverLinkAttributes, range: linkRange)
             hoveredLinkRange = linkRange
-            NSCursor.pointingHand.set()
         }
     }
 
@@ -774,18 +689,6 @@ final class NativeMarkdownSelectableTextView: NSTextView {
         return rects
     }
 
-    private func addLinkCursorRects() {
-        guard let textStorage, textStorage.length > 0 else { return }
-        let fullRange = NSRange(location: 0, length: textStorage.length)
-
-        textStorage.enumerateAttribute(.link, in: fullRange) { value, range, _ in
-            guard value != nil, range.length > 0 else { return }
-            for rect in linkCursorRects(for: range) {
-                addCursorRect(rect, cursor: .pointingHand)
-            }
-        }
-    }
-
     private func linkRange(at point: NSPoint) -> NSRange? {
         guard let textStorage, textStorage.length > 0 else { return nil }
         let fullRange = NSRange(location: 0, length: textStorage.length)
@@ -822,38 +725,5 @@ final class NativeMarkdownSelectableTextView: NSTextView {
             rects.append(rect)
         }
         return rects
-    }
-}
-
-extension NSScrollView {
-    func refreshNativeMarkdownLinkInteractionsAfterScroll() {
-        guard let window else { return }
-        window.acceptsMouseMovedEvents = true
-
-        let visibleWindowRect = contentView.convert(contentView.bounds, to: nil)
-        (documentView ?? self).refreshNativeMarkdownLinkInteractions(
-            inVisibleWindowRect: visibleWindowRect,
-            window: window
-        )
-    }
-}
-
-private extension NSView {
-    func refreshNativeMarkdownLinkInteractions(inVisibleWindowRect visibleWindowRect: NSRect, window: NSWindow) {
-        if let textView = self as? NativeMarkdownSelectableTextView, textView.window === window {
-            let textViewWindowRect = textView.convert(textView.bounds, to: nil)
-            if textViewWindowRect.intersects(visibleWindowRect) {
-                textView.refreshLinkInteractionForCurrentMouseLocation()
-            } else {
-                textView.clearLinkHoverForExternalLayoutChange()
-            }
-        }
-
-        for subview in subviews {
-            subview.refreshNativeMarkdownLinkInteractions(
-                inVisibleWindowRect: visibleWindowRect,
-                window: window
-            )
-        }
     }
 }

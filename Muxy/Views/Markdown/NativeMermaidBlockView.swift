@@ -265,8 +265,8 @@ private struct NativeMermaidPreviewButton: NSViewRepresentable {
         Coordinator(action: action)
     }
 
-    func makeNSView(context: Context) -> PointingHandCursorButton {
-        let button = PointingHandCursorButton()
+    func makeNSView(context: Context) -> NativeMermaidPreviewNSButton {
+        let button = NativeMermaidPreviewNSButton()
         button.target = context.coordinator
         button.action = #selector(Coordinator.performAction)
         button.setContentHuggingPriority(.required, for: .horizontal)
@@ -275,14 +275,14 @@ private struct NativeMermaidPreviewButton: NSViewRepresentable {
         return button
     }
 
-    func updateNSView(_ button: PointingHandCursorButton, context: Context) {
+    func updateNSView(_ button: NativeMermaidPreviewNSButton, context: Context) {
         context.coordinator.action = action
         button.target = context.coordinator
         button.action = #selector(Coordinator.performAction)
         configure(button)
     }
 
-    private func configure(_ button: PointingHandCursorButton) {
+    private func configure(_ button: NativeMermaidPreviewNSButton) {
         button.title = title
         button.image = NSImage(systemSymbolName: systemImageName, accessibilityDescription: title)
         button.imagePosition = .imageLeading
@@ -292,7 +292,7 @@ private struct NativeMermaidPreviewButton: NSViewRepresentable {
         button.font = .systemFont(ofSize: 11, weight: .medium)
         button.contentTintColor = .controlAccentColor
         button.isEnabled = enabled
-        button.usesPointingHandCursor = enabled
+        button.cursorEnabled = enabled
         button.sizeToFit()
     }
 
@@ -310,80 +310,12 @@ private struct NativeMermaidPreviewButton: NSViewRepresentable {
     }
 }
 
-private final class PointingHandCursorButton: NSButton {
-    var usesPointingHandCursor = true {
-        didSet { refreshCursorState() }
-    }
+private final class NativeMermaidPreviewNSButton: NSButton, NativeMarkdownPointingHandCursorRegion {
+    var cursorEnabled = true
 
-    private var cursorTrackingArea: NSTrackingArea?
-
-    override var isEnabled: Bool {
-        didSet { refreshCursorState() }
-    }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        window?.acceptsMouseMovedEvents = true
-        refreshCursorState()
-    }
-
-    override func updateTrackingAreas() {
-        if let cursorTrackingArea {
-            removeTrackingArea(cursorTrackingArea)
-        }
-
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.activeAlways, .mouseEnteredAndExited, .mouseMoved, .cursorUpdate],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        cursorTrackingArea = area
-        super.updateTrackingAreas()
-    }
-
-    override func resetCursorRects() {
-        super.resetCursorRects()
-        guard shouldUsePointingHandCursor else { return }
-        addCursorRect(bounds, cursor: .pointingHand)
-    }
-
-    override func setFrameSize(_ newSize: NSSize) {
-        super.setFrameSize(newSize)
-        updateTrackingAreas()
-        refreshCursorState()
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        setPointingHandIfNeeded()
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        super.mouseMoved(with: event)
-        setPointingHandIfNeeded()
-    }
-
-    override func cursorUpdate(with event: NSEvent) {
-        if shouldUsePointingHandCursor {
-            NSCursor.pointingHand.set()
-        } else {
-            super.cursorUpdate(with: event)
-        }
-    }
-
-    private var shouldUsePointingHandCursor: Bool {
-        usesPointingHandCursor && isEnabled
-    }
-
-    private func setPointingHandIfNeeded() {
-        guard shouldUsePointingHandCursor else { return }
-        NSCursor.pointingHand.set()
-    }
-
-    private func refreshCursorState() {
-        window?.invalidateCursorRects(for: self)
+    func nativeMarkdownWantsPointingHandCursor(atWindowPoint windowPoint: NSPoint) -> Bool {
+        guard cursorEnabled, isEnabled, !isHidden else { return false }
+        return bounds.contains(convert(windowPoint, from: nil))
     }
 }
 
