@@ -32,6 +32,7 @@ struct Sidebar: View {
     @Environment(ProjectGroupStore.self) private var groupStore
     @Environment(WorktreeStore.self) private var worktreeStore
     @State private var dragState = ProjectDragState()
+    @State private var groupHeaderFrames: [UUID: CGRect] = [:]
     let expanded: Bool
     @AppStorage(SidebarCollapsedStyle.storageKey) private var collapsedStyleRaw = SidebarCollapsedStyle.defaultValue.rawValue
     @AppStorage(SidebarExpandedStyle.storageKey) private var expandedStyleRaw = SidebarExpandedStyle.defaultValue.rawValue
@@ -123,7 +124,8 @@ struct Sidebar: View {
                             )
                         },
                         allGroups: groupStore.groups,
-                        projectDragGesture: { projectDragGesture(for: $0) }
+                        projectDragGesture: { projectDragGesture(for: $0) },
+                        publishGroupHeaderFrame: dragState.draggedID != nil
                     )
                 }
                 ungroupedSection
@@ -134,6 +136,10 @@ struct Sidebar: View {
             .onPreferenceChange(UUIDFramePreferenceKey<SidebarFrameTag>.self) { frames in
                 guard dragState.draggedID != nil else { return }
                 dragState.frames = frames
+            }
+            .onPreferenceChange(UUIDFramePreferenceKey<SidebarGroupFrameTag>.self) { frames in
+                guard dragState.draggedID != nil else { return }
+                groupHeaderFrames = frames
             }
         }
         .coordinateSpace(name: "sidebar")
@@ -158,6 +164,7 @@ struct Sidebar: View {
                             onSetLogo: { projectStore.setLogo(id: project.id, to: $0) },
                             onSetIconColor: { projectStore.setIconColor(id: project.id, to: $0) }
                         )
+                        .contextMenu { moveToGroupMenu(for: project) }
                     } else {
                         ProjectRow(
                             project: project,
@@ -169,6 +176,7 @@ struct Sidebar: View {
                             onSetLogo: { projectStore.setLogo(id: project.id, to: $0) },
                             onSetIconColor: { projectStore.setIconColor(id: project.id, to: $0) }
                         )
+                        .contextMenu { moveToGroupMenu(for: project) }
                     }
                 }
                 .background {
@@ -205,6 +213,7 @@ struct Sidebar: View {
                         dragState.draggedID = nil
                         dragState.frames = [:]
                         dragState.lastReorderTargetID = nil
+                        groupHeaderFrames = [:]
                     }
                 }
         )
@@ -239,8 +248,44 @@ struct Sidebar: View {
         groupStore.addGroup(name: "New Group")
     }
 
+    @ViewBuilder
+    private func moveToGroupMenu(for project: Project) -> some View {
+        if !groupStore.groups.isEmpty {
+            Menu("Move to Group") {
+                ForEach(groupStore.groups) { group in
+                    Button(group.name) {
+                        groupStore.addProject(projectID: project.id, toGroup: group.id)
+                    }
+                }
+            }
+        }
+    }
+
+    private func groupContaining(_ projectID: UUID) -> ProjectGroup? {
+        groupStore.groups.first { $0.projectIDs.contains(projectID) }
+    }
+
     private func reorderIfNeeded(at location: CGPoint) {
         guard let draggedID = dragState.draggedID else { return }
+
+        for (groupID, frame) in groupHeaderFrames where frame.contains(location) {
+            guard let targetGroup = groupStore.groups.first(where: { $0.id == groupID }) else { continue }
+            guard dragState.lastReorderTargetID != groupID else { return }
+            dragState.lastReorderTargetID = groupID
+
+            if let sourceGroup = groupContaining(draggedID) {
+                guard sourceGroup.id != targetGroup.id else { return }
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    groupStore.moveProject(projectID: draggedID, fromGroup: sourceGroup.id, toGroup: targetGroup.id)
+                }
+            } else {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    groupStore.addProject(projectID: draggedID, toGroup: targetGroup.id)
+                }
+            }
+            return
+        }
+
         var hoveredTargetID: UUID?
 
         for (id, frame) in dragState.frames where id != draggedID {
@@ -248,16 +293,48 @@ struct Sidebar: View {
             hoveredTargetID = id
             guard dragState.lastReorderTargetID != id else { return }
 
-            guard let sourceIndex = projectStore.projects.firstIndex(where: { $0.id == draggedID }),
-                  let destIndex = projectStore.projects.firstIndex(where: { $0.id == id })
-            else { return }
+            let sourceGroup = groupContaining(draggedID)
+            let targetGroup = groupContaining(id)
 
             dragState.lastReorderTargetID = id
-            let offset = destIndex > sourceIndex ? destIndex + 1 : destIndex
-            withAnimation(.easeInOut(duration: 0.15)) {
-                projectStore.reorder(
-                    fromOffsets: IndexSet(integer: sourceIndex), toOffset: offset
-                )
+
+            switch (sourceGroup, targetGroup) {
+            case let (source?, target?) where source.id == target.id:
+                guard let sourceOffset = source.projectIDs.firstIndex(of: draggedID),
+                      let destOffset = target.projectIDs.firstIndex(of: id)
+                else { return }
+                let insertOffset = destOffset > sourceOffset ? destOffset + 1 : destOffset
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    groupStore.reorderProjects(
+                        inGroup: source.id,
+                        fromOffsets: IndexSet(integer: sourceOffset),
+                        toOffset: insertOffset
+                    )
+                }
+
+            case let (source?, target?):
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    groupStore.moveProject(projectID: draggedID, fromGroup: source.id, toGroup: target.id)
+                }
+
+            case let (nil, target?):
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    groupStore.addProject(projectID: draggedID, toGroup: target.id)
+                }
+
+            case let (source?, nil):
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    groupStore.removeProject(projectID: draggedID, fromGroup: source.id)
+                }
+
+            case (nil, nil):
+                guard let sourceIndex = projectStore.projects.firstIndex(where: { $0.id == draggedID }),
+                      let destIndex = projectStore.projects.firstIndex(where: { $0.id == id })
+                else { return }
+                let insertOffset = destIndex > sourceIndex ? destIndex + 1 : destIndex
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    projectStore.reorder(fromOffsets: IndexSet(integer: sourceIndex), toOffset: insertOffset)
+                }
             }
             return
         }

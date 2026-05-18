@@ -17,6 +17,7 @@ struct ProjectGroupSection: View {
     let onMoveProject: (Project, UUID) -> Void
     let allGroups: [ProjectGroup]
     let projectDragGesture: (Project) -> AnyGesture<DragGesture.Value>
+    let publishGroupHeaderFrame: Bool
 
     @Environment(ProjectGroupStore.self) private var groupStore
 
@@ -72,6 +73,7 @@ struct ProjectGroupSection: View {
         .padding(.horizontal, UIMetrics.spacing2)
         .padding(.vertical, UIMetrics.spacing1)
         .contentShape(Rectangle())
+        .background { groupHeaderFramePublisher }
         .onTapGesture {
             withAnimation(.easeInOut(duration: 0.15)) {
                 groupStore.toggleExpanded(groupID: group.id)
@@ -93,12 +95,25 @@ struct ProjectGroupSection: View {
                 .frame(width: UIMetrics.iconXXL, height: UIMetrics.iconSM)
         }
         .contentShape(Rectangle())
+        .background { groupHeaderFramePublisher }
         .onTapGesture {
             withAnimation(.easeInOut(duration: 0.15)) {
                 groupStore.toggleExpanded(groupID: group.id)
             }
         }
         .contextMenu { groupContextMenu }
+    }
+
+    @ViewBuilder
+    private var groupHeaderFramePublisher: some View {
+        if publishGroupHeaderFrame {
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: UUIDFramePreferenceKey<SidebarGroupFrameTag>.self,
+                    value: [group.id: geo.frame(in: .named("sidebar"))]
+                )
+            }
+        }
     }
 
     @ViewBuilder
