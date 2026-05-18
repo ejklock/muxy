@@ -70,7 +70,7 @@ jobs:
 
       - name: Setup GhosttyKit
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           chmod +x scripts/setup.sh
           scripts/setup.sh
