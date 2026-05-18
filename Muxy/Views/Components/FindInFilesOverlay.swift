@@ -48,7 +48,9 @@ struct FindInFilesOverlay: View {
                 onSubmit: { confirmSelection() },
                 onEscape: { onDismiss() },
                 onArrowUp: { moveHighlight(-1) },
-                onArrowDown: { moveHighlight(1) }
+                onArrowDown: { moveHighlight(1) },
+                onPageUp: { moveHighlight(-PaletteSearchField.pageJump) },
+                onPageDown: { moveHighlight(PaletteSearchField.pageJump) }
             )
             SearchOptionToggle(
                 label: "Aa",
