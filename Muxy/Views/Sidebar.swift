@@ -80,7 +80,7 @@ struct Sidebar: View {
         .help(shortcutTooltip("Add Project", for: .openProject))
     }
 
-    private var groupedProjects: [(group: ProjectGroup, projects: [Project])] {
+    private var resolvedGroupedProjects: [(group: ProjectGroup, projects: [Project])] {
         groupStore.groups.map { group in
             let projects = group.projectIDs.compactMap { id in
                 projectStore.projects.first { $0.id == id }
@@ -89,25 +89,29 @@ struct Sidebar: View {
         }
     }
 
-    private var ungroupedProjects: [Project] {
-        let assignedIDs = Set(groupStore.groups.flatMap(\.projectIDs))
-        return projectStore.projects.filter { !assignedIDs.contains($0.id) }
+    private var projectGroupIndex: [UUID: UUID] {
+        var index: [UUID: UUID] = [:]
+        for group in groupStore.groups {
+            for projectID in group.projectIDs {
+                index[projectID] = group.id
+            }
+        }
+        return index
     }
 
-    private func globalIndexOffset(forGroupIndex groupIndex: Int) -> Int {
-        groupedProjects.prefix(groupIndex).reduce(0) { $0 + $1.projects.count }
+    private func globalIndexOffset(forGroupIndex groupIndex: Int, in grouped: [(group: ProjectGroup, projects: [Project])]) -> Int {
+        grouped.prefix(groupIndex).reduce(0) { $0 + $1.projects.count }
     }
 
     private var projectList: some View {
-        ScrollView(.vertical, showsIndicators: false) {
+        let grouped = resolvedGroupedProjects
+        let assignedIDs = Set(grouped.flatMap { $0.projects.map(\.id) })
+        let ungrouped = projectStore.projects.filter { !assignedIDs.contains($0.id) }
+
+        return ScrollView(.vertical, showsIndicators: false) {
             LazyVStack(spacing: UIMetrics.spacing3) {
-                ForEach(Array(groupedProjects.enumerated()), id: \.element.group.id) { groupIndex, entry in
-                    ProjectGroupSection(
-                        group: entry.group,
-                        projects: entry.projects,
-                        isWide: isWide,
-                        draggedID: dragState.draggedID,
-                        globalIndexOffset: globalIndexOffset(forGroupIndex: groupIndex),
+                ForEach(Array(grouped.enumerated()), id: \.element.group.id) { groupIndex, entry in
+                    let sectionActions = ProjectGroupActions(
                         onSelect: { select($0) },
                         onRemove: { remove($0) },
                         onRename: { project, name in projectStore.rename(id: project.id, to: name) },
@@ -123,12 +127,20 @@ struct Sidebar: View {
                                 toGroup: targetGroupID
                             )
                         },
+                        projectDragGesture: { projectDragGesture(for: $0) }
+                    )
+                    ProjectGroupSection(
+                        group: entry.group,
+                        projects: entry.projects,
+                        isWide: isWide,
+                        draggedID: dragState.draggedID,
+                        globalIndexOffset: globalIndexOffset(forGroupIndex: groupIndex, in: grouped),
+                        actions: sectionActions,
                         allGroups: groupStore.groups,
-                        projectDragGesture: { projectDragGesture(for: $0) },
                         publishGroupHeaderFrame: dragState.draggedID != nil
                     )
                 }
-                ungroupedSection
+                ungroupedSection(projects: ungrouped, groupedTotalCount: grouped.reduce(0) { $0 + $1.projects.count })
                 addButton
             }
             .padding(.horizontal, isWide ? UIMetrics.spacing3 : UIMetrics.spacing4)
@@ -146,10 +158,9 @@ struct Sidebar: View {
     }
 
     @ViewBuilder
-    private var ungroupedSection: some View {
-        let projects = ungroupedProjects
+    private func ungroupedSection(projects: [Project], groupedTotalCount: Int) -> some View {
         if !projects.isEmpty {
-            let ungroupedOffset = groupedProjects.reduce(0) { $0 + $1.projects.count }
+            let ungroupedOffset = groupedTotalCount
             ForEach(Array(projects.enumerated()), id: \.element.id) { offset, project in
                 let shortcutIndex = ungroupedOffset + offset
                 Group {
@@ -261,19 +272,18 @@ struct Sidebar: View {
         }
     }
 
-    private func groupContaining(_ projectID: UUID) -> ProjectGroup? {
-        groupStore.groups.first { $0.projectIDs.contains(projectID) }
-    }
-
     private func reorderIfNeeded(at location: CGPoint) {
         guard let draggedID = dragState.draggedID else { return }
+        let lookup = projectGroupIndex
 
         for (groupID, frame) in groupHeaderFrames where frame.contains(location) {
             guard let targetGroup = groupStore.groups.first(where: { $0.id == groupID }) else { continue }
             guard dragState.lastReorderTargetID != groupID else { return }
             dragState.lastReorderTargetID = groupID
 
-            if let sourceGroup = groupContaining(draggedID) {
+            if let sourceGroupID = lookup[draggedID],
+               let sourceGroup = groupStore.groups.first(where: { $0.id == sourceGroupID })
+            {
                 guard sourceGroup.id != targetGroup.id else { return }
                 withAnimation(.easeInOut(duration: 0.15)) {
                     groupStore.moveProject(projectID: draggedID, fromGroup: sourceGroup.id, toGroup: targetGroup.id)
@@ -293,8 +303,8 @@ struct Sidebar: View {
             hoveredTargetID = id
             guard dragState.lastReorderTargetID != id else { return }
 
-            let sourceGroup = groupContaining(draggedID)
-            let targetGroup = groupContaining(id)
+            let sourceGroup = lookup[draggedID].flatMap { groupID in groupStore.groups.first { $0.id == groupID } }
+            let targetGroup = lookup[id].flatMap { groupID in groupStore.groups.first { $0.id == groupID } }
 
             dragState.lastReorderTargetID = id
 

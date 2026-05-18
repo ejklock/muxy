@@ -1,11 +1,6 @@
 import SwiftUI
 
-struct ProjectGroupSection: View {
-    let group: ProjectGroup
-    let projects: [Project]
-    let isWide: Bool
-    let draggedID: UUID?
-    let globalIndexOffset: Int
+struct ProjectGroupActions {
     let onSelect: (Project) -> Void
     let onRemove: (Project) -> Void
     let onRename: (Project, String) -> Void
@@ -15,8 +10,17 @@ struct ProjectGroupSection: View {
     let onDeleteGroup: () -> Void
     let onAddGroup: () -> Void
     let onMoveProject: (Project, UUID) -> Void
-    let allGroups: [ProjectGroup]
     let projectDragGesture: (Project) -> AnyGesture<DragGesture.Value>
+}
+
+struct ProjectGroupSection: View {
+    let group: ProjectGroup
+    let projects: [Project]
+    let isWide: Bool
+    let draggedID: UUID?
+    let globalIndexOffset: Int
+    let actions: ProjectGroupActions
+    let allGroups: [ProjectGroup]
     let publishGroupHeaderFrame: Bool
 
     @Environment(ProjectGroupStore.self) private var groupStore
@@ -32,10 +36,10 @@ struct ProjectGroupSection: View {
             }
         }
         .padding(UIMetrics.spacing1)
-        .overlay(
+        .overlay {
             RoundedRectangle(cornerRadius: UIMetrics.radiusMD)
-                .stroke(MuxyTheme.border, lineWidth: 1)
-        )
+                .strokeBorder(MuxyTheme.border, lineWidth: 1)
+        }
     }
 
     private var isAnyDragging: Bool { draggedID != nil }
@@ -118,10 +122,10 @@ struct ProjectGroupSection: View {
 
     @ViewBuilder
     private var groupContextMenu: some View {
-        Button("Add New Group") { onAddGroup() }
+        Button("Add New Group") { actions.onAddGroup() }
         Divider()
         Button("Rename Group") { startRename() }
-        Button("Delete Group", role: .destructive) { onDeleteGroup() }
+        Button("Delete Group", role: .destructive) { actions.onDeleteGroup() }
     }
 
     @ViewBuilder
@@ -134,11 +138,11 @@ struct ProjectGroupSection: View {
                         project: project,
                         shortcutIndex: shortcutIndex < 9 ? shortcutIndex + 1 : nil,
                         isAnyDragging: isAnyDragging,
-                        onSelect: { onSelect(project) },
-                        onRemove: { onRemove(project) },
-                        onRename: { onRename(project, $0) },
-                        onSetLogo: { onSetLogo(project, $0) },
-                        onSetIconColor: { onSetIconColor(project, $0) }
+                        onSelect: { actions.onSelect(project) },
+                        onRemove: { actions.onRemove(project) },
+                        onRename: { actions.onRename(project, $0) },
+                        onSetLogo: { actions.onSetLogo(project, $0) },
+                        onSetIconColor: { actions.onSetIconColor(project, $0) }
                     )
                     .contextMenu { moveToGroupMenu(for: project) }
                 } else {
@@ -146,11 +150,11 @@ struct ProjectGroupSection: View {
                         project: project,
                         shortcutIndex: shortcutIndex < 9 ? shortcutIndex + 1 : nil,
                         isAnyDragging: isAnyDragging,
-                        onSelect: { onSelect(project) },
-                        onRemove: { onRemove(project) },
-                        onRename: { onRename(project, $0) },
-                        onSetLogo: { onSetLogo(project, $0) },
-                        onSetIconColor: { onSetIconColor(project, $0) }
+                        onSelect: { actions.onSelect(project) },
+                        onRemove: { actions.onRemove(project) },
+                        onRename: { actions.onRename(project, $0) },
+                        onSetLogo: { actions.onSetLogo(project, $0) },
+                        onSetIconColor: { actions.onSetIconColor(project, $0) }
                     )
                     .contextMenu { moveToGroupMenu(for: project) }
                 }
@@ -165,7 +169,7 @@ struct ProjectGroupSection: View {
                     }
                 }
             }
-            .gesture(projectDragGesture(project))
+            .gesture(actions.projectDragGesture(project))
         }
     }
 
@@ -176,7 +180,7 @@ struct ProjectGroupSection: View {
             Menu("Move to Group") {
                 ForEach(otherGroups) { targetGroup in
                     Button(targetGroup.name) {
-                        onMoveProject(project, targetGroup.id)
+                        actions.onMoveProject(project, targetGroup.id)
                     }
                 }
             }
@@ -194,7 +198,7 @@ struct ProjectGroupSection: View {
             cancelRename()
             return
         }
-        onRenameGroup(trimmed)
+        actions.onRenameGroup(trimmed)
         isRenaming = false
     }
 
