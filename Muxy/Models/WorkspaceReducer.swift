@@ -134,6 +134,9 @@ enum WorkspaceReducer {
                 state: &state
             )
 
+        case let .createWebViewTab(projectID, areaID):
+            TabReducer.createWebViewTab(projectID: projectID, areaID: areaID, state: &state)
+
         case let .closeTab(projectID, areaID, tabID):
             guard let key = WorkspaceReducerShared.activeKey(projectID: projectID, state: state) else { break }
             TabReducer.closeTab(tabID, areaID: areaID, key: key, state: &state, effects: &effects)

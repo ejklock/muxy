@@ -38,6 +38,7 @@ final class AppState {
         case createExternalEditorTab(projectID: UUID, areaID: UUID?, filePath: String, command: String)
         case createDiffViewerTab(projectID: UUID, areaID: UUID?, request: DiffViewerRequest)
         case restoreClosedTerminalTab(projectID: UUID, areaID: UUID?, snapshot: ClosedTerminalTabSnapshot)
+        case createWebViewTab(projectID: UUID, areaID: UUID?)
         case closeTab(projectID: UUID, areaID: UUID, tabID: UUID)
         case selectTab(projectID: UUID, areaID: UUID, tabID: UUID)
         case selectTabByIndex(projectID: UUID, index: Int)

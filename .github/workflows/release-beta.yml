@@ -135,7 +135,7 @@ jobs:
             --version "${{ needs.validate.outputs.version }}" \
             --sign-identity "${{ steps.identity.outputs.name }}" \
             --sparkle-public-key "${{ steps.sparkle.outputs.public_key }}" \
-            --sparkle-feed-url "https://github.com/muxy-app/muxy/releases/download/beta-channel/appcast-beta-${{ matrix.arch }}.xml"
+            --sparkle-feed-url "https://github.com/ejklock/muxy/releases/download/beta-channel/appcast-beta-${{ matrix.arch }}.xml"
 
       - name: Notarize DMG
         env:
@@ -192,7 +192,7 @@ jobs:
         run: |
           mkdir -p prev
           for ARCH in arm64 x86_64; do
-            URL="https://github.com/muxy-app/muxy/releases/download/beta-channel/appcast-beta-${ARCH}.xml"
+            URL="https://github.com/ejklock/muxy/releases/download/beta-channel/appcast-beta-${ARCH}.xml"
             if curl -fsSL "$URL" -o "prev/appcast-beta-${ARCH}.xml"; then
               echo "Fetched previous beta appcast for $ARCH"
             else
@@ -265,42 +265,3 @@ jobs:
               appcast-beta-arm64.xml appcast-beta-x86_64.xml
           fi
 
-      - name: Notify Discord
-        continue-on-error: true
-        env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.validate.outputs.tag }}
-          VERSION: ${{ needs.validate.outputs.version }}
-          REPO: ${{ github.repository }}
-        run: |
-          if [[ -z "$DISCORD_WEBHOOK_URL" ]]; then
-            echo "DISCORD_WEBHOOK_URL not set, skipping Discord notification"
-            exit 0
-          fi
-          NOTES=$(gh release view "$TAG" --repo "$REPO" --json body --jq .body \
-            | sed -E 's# by @[A-Za-z0-9_-]+ in https://github\.com/[^ ]+/pull/[0-9]+##g')
-          if [[ ${#NOTES} -gt 3800 ]]; then
-            NOTES="${NOTES:0:3800}…"
-          fi
-          URL="https://github.com/${REPO}/releases/tag/${TAG}"
-          PAYLOAD=$(jq -n \
-            --arg title "Muxy ${VERSION} (beta) released" \
-            --arg url "$URL" \
-            --arg notes "$NOTES" \
-            --arg footer "Beta channel" \
-            '{
-              username: "Muxy Releases",
-              embeds: [{
-                title: $title,
-                url: $url,
-                description: $notes,
-                color: 15844367,
-                footer: { text: $footer },
-                timestamp: (now | todate)
-              }]
-            }')
-          if ! curl -fsSL -H "Content-Type: application/json" \
-            -X POST -d "$PAYLOAD" "$DISCORD_WEBHOOK_URL"; then
-            echo "Discord notification failed; release succeeded regardless"
-          fi

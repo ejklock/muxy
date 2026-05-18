@@ -41,7 +41,7 @@ final class TabArea: Identifiable {
     }
 
     func snapshot() -> TabAreaSnapshot {
-        let persistedTabs = tabs.filter { $0.kind != .diffViewer }
+        let persistedTabs = tabs.filter { $0.kind != .diffViewer && $0.kind != .webView }
         let activeIndex = persistedTabs.firstIndex(where: { $0.id == activeTabID })
         return TabAreaSnapshot(
             id: id,
@@ -109,6 +109,10 @@ final class TabArea: Identifiable {
         let editorState = EditorTabState(projectPath: projectPath, filePath: filePath)
         editorState.suppressInitialFocus = suppressInitialFocus
         insertTab(TerminalTab(editorState: editorState))
+    }
+
+    func createWebViewTab() {
+        insertTab(TerminalTab(webViewState: WebViewTabState(projectPath: projectPath)))
     }
 
     func createDiffViewerTab(vcs: VCSTabState, filePath: String, isStaged: Bool) {
