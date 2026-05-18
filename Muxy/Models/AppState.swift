@@ -39,6 +39,7 @@ final class AppState {
         case createDiffViewerTab(projectID: UUID, areaID: UUID?, request: DiffViewerRequest)
         case restoreClosedTerminalTab(projectID: UUID, areaID: UUID?, snapshot: ClosedTerminalTabSnapshot)
         case createWebViewTab(projectID: UUID, areaID: UUID?)
+        case createWebViewTabWithURL(projectID: UUID, areaID: UUID?, urlString: String, title: String)
         case closeTab(projectID: UUID, areaID: UUID, tabID: UUID)
         case selectTab(projectID: UUID, areaID: UUID, tabID: UUID)
         case selectTabByIndex(projectID: UUID, index: Int)
@@ -299,6 +300,10 @@ final class AppState {
                 return
             }
         }
+        if settings.defaultEditor == .vscodeServer {
+            openFileInVSCodeServer(filePath, projectID: projectID, line: line, column: column)
+            return
+        }
         for area in allAreas(for: projectID) {
             if let tab = area.tabs.first(where: { $0.content.editorState?.filePath == filePath }) {
                 dispatch(.selectTab(projectID: projectID, areaID: area.id, tabID: tab.id))
@@ -319,6 +324,54 @@ final class AppState {
                 }
             }
         }
+    }
+
+    private func openFileInVSCodeServer(_ filePath: String, projectID: UUID, line: Int?, column: Int) {
+        let settings = EditorSettings.shared
+        let baseURL = settings.vscodeServerURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let projectPath = activeWorktreePath(for: projectID) ?? ""
+        let urlString = vscodeServerURL(
+            baseURL: baseURL,
+            projectPath: projectPath,
+            filePath: filePath,
+            line: line,
+            column: column
+        )
+        for area in allAreas(for: projectID) {
+            if let tab = area.tabs.first(where: { $0.content.webViewState?.urlString.hasPrefix(baseURL) == true }) {
+                tab.content.webViewState?.requestLoad(urlString)
+                dispatch(.selectTab(projectID: projectID, areaID: area.id, tabID: tab.id))
+                return
+            }
+        }
+        let fileName = URL(fileURLWithPath: filePath).lastPathComponent
+        dispatch(.createWebViewTabWithURL(
+            projectID: projectID,
+            areaID: nil,
+            urlString: urlString,
+            title: fileName
+        ))
+    }
+
+    private func vscodeServerURL(
+        baseURL: String,
+        projectPath: String,
+        filePath: String,
+        line: Int?,
+        column: Int
+    ) -> String {
+        let base = baseURL.hasSuffix("/") ? String(baseURL.dropLast()) : baseURL
+        var url = "\(base)/?folder=\(projectPath)"
+        guard let line else { return url }
+        let relativePath: String
+        let prefix = projectPath.hasSuffix("/") ? projectPath : projectPath + "/"
+        if filePath.hasPrefix(prefix) {
+            relativePath = String(filePath.dropFirst(prefix.count))
+        } else {
+            relativePath = filePath
+        }
+        url += "&goto=\(relativePath):\(line):\(column)"
+        return url
     }
 
     func openMarkdownLinkTarget(_ filePath: String, projectID: UUID, fragment: String?) {

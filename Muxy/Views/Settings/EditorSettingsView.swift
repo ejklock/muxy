@@ -56,6 +56,15 @@ struct EditorSettingsView: View {
                         .frame(width: SettingsMetrics.controlWidth)
                 }
             }
+
+            if settings.defaultEditor == .vscodeServer {
+                SettingsRow("Server URL") {
+                    TextField("http://localhost:8080", text: $settings.vscodeServerURL)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: SettingsMetrics.labelFontSize, design: .monospaced))
+                        .frame(width: SettingsMetrics.controlWidth)
+                }
+            }
         }
 
         SettingsSection(

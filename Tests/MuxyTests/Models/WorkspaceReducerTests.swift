@@ -981,4 +981,27 @@ struct WorkspaceReducerTests {
         let newSecondArea = area(in: state, key: key, areaID: secondAreaID)!
         #expect(newSecondArea.activeTabID == newSecondArea.tabs[1].id)
     }
+
+    @Test("createWebViewTabWithURL creates webView tab with custom URL and title")
+    func createWebViewTabWithURL() {
+        let projectID = UUID()
+        let worktreeID = UUID()
+        var state = makeState(projectID: projectID, worktreeID: worktreeID)
+
+        _ = WorkspaceReducer.reduce(
+            action: .createWebViewTabWithURL(
+                projectID: projectID,
+                areaID: nil,
+                urlString: "http://localhost:8080/?folder=/tmp/test",
+                title: "main.swift"
+            ),
+            state: &state
+        )
+
+        let area = focusedArea(in: state, projectID: projectID)!
+        #expect(area.tabs.count == 2)
+        #expect(area.activeTab?.kind == .webView)
+        #expect(area.activeTab?.content.webViewState?.urlString == "http://localhost:8080/?folder=/tmp/test")
+        #expect(area.activeTab?.content.webViewState?.displayTitle == "main.swift")
+    }
 }

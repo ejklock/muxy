@@ -385,4 +385,21 @@ struct TabAreaTests {
         #expect(area.tabs.count == 2)
         #expect(area.tabs[0].id == firstTabID)
     }
+
+    @Test("createWebViewTab with URL and title creates webView tab with custom URL and title")
+    func createWebViewTabWithURL() {
+        let area = TabArea(projectPath: testPath)
+        area.createWebViewTab(urlString: "http://localhost:8080/?folder=/tmp/test", title: "main.swift")
+        #expect(area.tabs.count == 2)
+        #expect(area.activeTab?.kind == .webView)
+        #expect(area.activeTab?.content.webViewState?.urlString == "http://localhost:8080/?folder=/tmp/test")
+        #expect(area.activeTab?.content.webViewState?.displayTitle == "main.swift")
+    }
+
+    @Test("createWebViewTab with URL and title uses provided title for tab title")
+    func createWebViewTabWithURLTitle() {
+        let area = TabArea(projectPath: testPath)
+        area.createWebViewTab(urlString: "http://localhost:8080", title: "App.swift")
+        #expect(area.activeTab?.title == "App.swift")
+    }
 }
