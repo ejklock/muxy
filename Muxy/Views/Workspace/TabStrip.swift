@@ -656,14 +656,10 @@ private struct TabCell: View {
                 .font(.system(size: UIMetrics.fontBody, weight: .semibold))
         } else if tab.kind == .diffViewer {
             Image(systemName: "rectangle.split.2x1")
-<<<<<<< HEAD
                 .font(.system(size: UIMetrics.fontFootnote, weight: .semibold))
-=======
-                .font(.system(size: 11, weight: .semibold))
         } else if tab.kind == .webView {
             Image(systemName: "globe")
-                .font(.system(size: 12, weight: .semibold))
->>>>>>> 2e520d5 (Add in-app browser tab)
+                .font(.system(size: UIMetrics.fontBody, weight: .semibold))
         } else {
             Image(systemName: "terminal")
                 .font(.system(size: UIMetrics.fontBody, weight: .semibold))

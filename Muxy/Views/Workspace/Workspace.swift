@@ -62,6 +62,9 @@ struct TerminalArea: View {
                         attached: { NotificationCenter.default.post(name: .toggleAttachedVCS, object: nil) }
                     )
                 },
+                onCreateWebViewTab: {
+                    appState.dispatch(.createWebViewTab(projectID: project.id, areaID: area.id))
+                },
                 onCloseTab: { tabID in
                     appState.closeTab(tabID, areaID: area.id, projectID: project.id)
                 },
@@ -146,6 +149,7 @@ private struct MaximizedAreaView: View {
     let onSelectTab: (UUID) -> Void
     let onCreateTab: () -> Void
     let onCreateVCSTab: () -> Void
+    let onCreateWebViewTab: () -> Void
     let onCloseTab: (UUID) -> Void
     let onForceCloseTab: (UUID) -> Void
     let onSplit: (SplitDirection) -> Void
@@ -164,6 +168,7 @@ private struct MaximizedAreaView: View {
             onSelectTab: onSelectTab,
             onCreateTab: onCreateTab,
             onCreateVCSTab: onCreateVCSTab,
+            onCreateWebViewTab: onCreateWebViewTab,
             onCloseTab: onCloseTab,
             onForceCloseTab: onForceCloseTab,
             onSplit: onSplit,
