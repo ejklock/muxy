@@ -73,6 +73,14 @@ enum TabReducer {
         area.createExternalEditorTab(filePath: filePath, command: command)
     }
 
+    static func createWebViewTab(projectID: UUID, areaID: UUID?, state: inout WorkspaceState) {
+        guard let key = WorkspaceReducerShared.activeKey(projectID: projectID, state: state),
+              let area = WorkspaceReducerShared.resolveArea(key: key, areaID: areaID, state: state)
+        else { return }
+        FocusReducer.focusArea(area.id, key: key, state: &state)
+        area.createWebViewTab()
+    }
+
     static func createDiffViewerTab(
         projectID: UUID,
         areaID: UUID?,

@@ -8,6 +8,7 @@ final class TerminalTab: Identifiable {
         case vcs
         case editor
         case diffViewer
+        case webView
     }
 
     enum Content {
@@ -15,6 +16,7 @@ final class TerminalTab: Identifiable {
         case vcs(VCSTabState)
         case editor(EditorTabState)
         case diffViewer(DiffViewerTabState)
+        case webView(WebViewTabState)
 
         var kind: Kind {
             switch self {
@@ -22,6 +24,7 @@ final class TerminalTab: Identifiable {
             case .vcs: .vcs
             case .editor: .editor
             case .diffViewer: .diffViewer
+            case .webView: .webView
             }
         }
 
@@ -45,12 +48,18 @@ final class TerminalTab: Identifiable {
             return state
         }
 
+        var webViewState: WebViewTabState? {
+            guard case let .webView(state) = self else { return nil }
+            return state
+        }
+
         var projectPath: String {
             switch self {
             case let .terminal(pane): pane.projectPath
             case let .vcs(state): state.projectPath
             case let .editor(state): state.projectPath
             case let .diffViewer(state): state.projectPath
+            case let .webView(state): state.projectPath
             }
         }
     }
@@ -76,6 +85,8 @@ final class TerminalTab: Identifiable {
             return state.displayTitle
         case let .diffViewer(state):
             return state.displayTitle
+        case let .webView(state):
+            return state.displayTitle
         }
     }
 
@@ -97,6 +108,11 @@ final class TerminalTab: Identifiable {
     init(diffViewerState: DiffViewerTabState) {
         id = UUID()
         content = .diffViewer(diffViewerState)
+    }
+
+    init(webViewState: WebViewTabState) {
+        id = UUID()
+        content = .webView(webViewState)
     }
 
     init(restoring snapshot: TerminalTabSnapshot, restoredSession: TerminalSessionSnapshot? = nil) {
@@ -122,6 +138,8 @@ final class TerminalTab: Identifiable {
                 content = .terminal(TerminalPaneState(projectPath: snapshot.projectPath, title: snapshot.paneTitle))
             }
         case .diffViewer:
+            content = .terminal(TerminalPaneState(projectPath: snapshot.projectPath, title: snapshot.paneTitle))
+        case .webView:
             content = .terminal(TerminalPaneState(projectPath: snapshot.projectPath, title: snapshot.paneTitle))
         }
     }

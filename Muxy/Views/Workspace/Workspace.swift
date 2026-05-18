@@ -106,6 +106,9 @@ struct TerminalArea: View {
                         attached: { NotificationCenter.default.post(name: .toggleAttachedVCS, object: nil) }
                     )
                 },
+                onCreateWebViewTab: { areaID in
+                    appState.dispatch(.createWebViewTab(projectID: project.id, areaID: areaID))
+                },
                 onCloseTab: { areaID, tabID in
                     appState.closeTab(tabID, areaID: areaID, projectID: project.id)
                 },
