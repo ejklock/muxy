@@ -32,30 +32,16 @@ struct SidebarGroupTests {
         #expect(store.groups.first?.projectIDs == [projectID])
     }
 
-    @Test("addProjectToFirstGroupOrDefault adds to first group when groups exist")
-    func addProjectToFirstGroupWhenGroupsExist() {
-        let newProjectID = UUID()
-        let group = ProjectGroup(name: "Default")
+    @Test("removeProjectFromAllGroups persists changes")
+    func removeProjectFromAllGroupsPersists() {
+        let projectID = UUID()
+        let group = ProjectGroup(name: "Work", projectIDs: [projectID])
         let persistence = ProjectGroupPersistenceStub(initial: [group])
         let store = ProjectGroupStore(persistence: persistence)
 
-        store.addProjectToFirstGroupOrDefault(projectID: newProjectID)
+        store.removeProjectFromAllGroups(projectID: projectID)
 
-        #expect(store.groups.first?.projectIDs == [newProjectID])
-        #expect(persistence.savedGroups?.first?.projectIDs == [newProjectID])
-    }
-
-    @Test("addProjectToFirstGroupOrDefault creates Default group when no groups exist")
-    func addProjectToFirstGroupCreatesDefault() {
-        let newProjectID = UUID()
-        let persistence = ProjectGroupPersistenceStub(initial: [])
-        let store = ProjectGroupStore(persistence: persistence)
-
-        store.addProjectToFirstGroupOrDefault(projectID: newProjectID)
-
-        #expect(store.groups.count == 1)
-        #expect(store.groups.first?.name == "Default")
-        #expect(store.groups.first?.projectIDs == [newProjectID])
+        #expect(persistence.savedGroups?.first?.projectIDs.isEmpty == true)
     }
 
     @Test("ProjectStore onProjectAdded callback fires after add")
@@ -106,40 +92,67 @@ struct SidebarGroupTests {
         #expect(store.projects.isEmpty)
     }
 
-    @Test("ProjectGroupStore init with existing IDs triggers migration to Default group")
-    func initWithExistingIDsCreatesMigration() {
-        let ids = [UUID(), UUID(), UUID()]
+    @Test("ProjectGroupStore init with no saved groups results in empty groups array")
+    func initWithNoSavedGroupsIsEmpty() {
         let persistence = ProjectGroupPersistenceStub(initial: [])
-        let store = ProjectGroupStore(persistence: persistence, existingProjectIDs: ids)
+        let store = ProjectGroupStore(persistence: persistence)
 
-        #expect(store.groups.count == 1)
-        #expect(store.groups.first?.name == "Default")
-        #expect(store.groups.first?.projectIDs == ids)
+        #expect(store.groups.isEmpty)
     }
 
-    @Test("removeProjectFromAllGroups persists changes")
-    func removeProjectFromAllGroupsPersists() {
+    @Test("ProjectGroupStore workspace selection survives group list changes")
+    func workspaceSelectionSurvivesUnrelatedGroupChanges() {
+        let groupA = ProjectGroup(name: "A")
+        let groupB = ProjectGroup(name: "B")
+        let persistence = ProjectGroupPersistenceStub(initial: [groupA, groupB])
+        let store = ProjectGroupStore(persistence: persistence)
+        store.selectGroup(id: groupA.id)
+
+        store.renameGroup(id: groupB.id, to: "B Renamed")
+
+        #expect(store.activeGroupID == groupA.id)
+    }
+
+    @Test("WorkspaceSwitcher addProject adds project to selected workspace")
+    func addProjectToWorkspace() {
         let projectID = UUID()
-        let group = ProjectGroup(name: "Work", projectIDs: [projectID])
+        let group = ProjectGroup(name: "Work")
         let persistence = ProjectGroupPersistenceStub(initial: [group])
         let store = ProjectGroupStore(persistence: persistence)
 
-        store.removeProjectFromAllGroups(projectID: projectID)
+        store.addProject(projectID: projectID, toGroup: group.id)
 
-        #expect(persistence.savedGroups?.first?.projectIDs.isEmpty == true)
+        #expect(store.groups.first?.projectIDs.contains(projectID) == true)
     }
 
-    @Test("addProjectToFirstGroupOrDefault persists Default group creation")
-    func addProjectPersistsDefaultGroupCreation() {
-        let newProjectID = UUID()
-        let persistence = ProjectGroupPersistenceStub(initial: [])
+    @Test("filteredProjects after workspace selection only shows workspace projects")
+    func filteredProjectsAfterSelection() {
+        let projectA = Project(name: "A", path: "/a")
+        let projectB = Project(name: "B", path: "/b")
+        let group = ProjectGroup(name: "Work", projectIDs: [projectA.id])
+        let persistence = ProjectGroupPersistenceStub(initial: [group])
         let store = ProjectGroupStore(persistence: persistence)
 
-        store.addProjectToFirstGroupOrDefault(projectID: newProjectID)
+        store.selectGroup(id: group.id)
+        let filtered = store.filteredProjects(from: [projectA, projectB])
 
-        #expect(persistence.savedGroups?.count == 1)
-        #expect(persistence.savedGroups?.first?.name == "Default")
-        #expect(persistence.savedGroups?.first?.projectIDs == [newProjectID])
+        #expect(filtered.count == 1)
+        #expect(filtered.first?.id == projectA.id)
+    }
+
+    @Test("filteredProjects after clearGroupSelection shows all projects")
+    func filteredProjectsAfterClearSelection() {
+        let projectA = Project(name: "A", path: "/a")
+        let projectB = Project(name: "B", path: "/b")
+        let group = ProjectGroup(name: "Work", projectIDs: [projectA.id])
+        let persistence = ProjectGroupPersistenceStub(initial: [group])
+        let store = ProjectGroupStore(persistence: persistence)
+
+        store.selectGroup(id: group.id)
+        store.clearGroupSelection()
+        let filtered = store.filteredProjects(from: [projectA, projectB])
+
+        #expect(filtered.count == 2)
     }
 }
 

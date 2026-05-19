@@ -7,11 +7,26 @@ private let logger = Logger(subsystem: "app.muxy", category: "ProjectGroupStore"
 @Observable
 final class ProjectGroupStore {
     private(set) var groups: [ProjectGroup] = []
+    private(set) var activeGroupID: UUID?
     private let persistence: any ProjectGroupPersisting
 
-    init(persistence: any ProjectGroupPersisting, existingProjectIDs: [UUID] = []) {
+    init(persistence: any ProjectGroupPersisting) {
         self.persistence = persistence
-        load(existingProjectIDs: existingProjectIDs)
+        load()
+    }
+
+    func selectGroup(id: UUID) {
+        activeGroupID = id
+    }
+
+    func clearGroupSelection() {
+        activeGroupID = nil
+    }
+
+    func filteredProjects(from projects: [Project]) -> [Project] {
+        guard let activeGroupID else { return projects }
+        guard let group = groups.first(where: { $0.id == activeGroupID }) else { return projects }
+        return projects.filter { group.projectIDs.contains($0.id) }
     }
 
     func addGroup(name: String) {
@@ -22,6 +37,9 @@ final class ProjectGroupStore {
     }
 
     func removeGroup(id: UUID) {
+        if activeGroupID == id {
+            activeGroupID = nil
+        }
         groups.removeAll { $0.id == id }
         save()
     }
@@ -58,17 +76,6 @@ final class ProjectGroupStore {
         save()
     }
 
-    func addProjectToFirstGroupOrDefault(projectID: UUID) {
-        if let firstGroup = groups.first {
-            addProject(projectID: projectID, toGroup: firstGroup.id)
-            return
-        }
-        let defaultGroup = ProjectGroup(name: "Default", sortOrder: 0)
-        groups.append(defaultGroup)
-        groups[groups.count - 1].projectIDs.append(projectID)
-        save()
-    }
-
     func reorderGroups(fromOffsets source: IndexSet, toOffset destination: Int) {
         groups.move(fromOffsets: source, toOffset: destination)
         for index in groups.indices {
@@ -83,12 +90,6 @@ final class ProjectGroupStore {
         save()
     }
 
-    func toggleExpanded(groupID: UUID) {
-        guard let index = groups.firstIndex(where: { $0.id == groupID }) else { return }
-        groups[index].isExpanded.toggle()
-        save()
-    }
-
     func save() {
         do {
             try persistence.saveGroups(groups)
@@ -97,15 +98,9 @@ final class ProjectGroupStore {
         }
     }
 
-    private func load(existingProjectIDs: [UUID]) {
+    private func load() {
         do {
             let loaded = try persistence.loadGroups()
-            if loaded.isEmpty && !existingProjectIDs.isEmpty {
-                let defaultGroup = ProjectGroup(name: "Default", sortOrder: 0, projectIDs: existingProjectIDs)
-                groups = [defaultGroup]
-                save()
-                return
-            }
             groups = loaded.sorted { $0.sortOrder < $1.sortOrder }
         } catch {
             logger.error("Failed to load project groups: \(error)")

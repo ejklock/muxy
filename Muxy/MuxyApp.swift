@@ -31,8 +31,7 @@ struct MuxyApp: App {
             worktrees: worktreeStore.worktrees
         )
         let groupStore = ProjectGroupStore(
-            persistence: environment.groupPersistence,
-            existingProjectIDs: projectStore.projects.map(\.id)
+            persistence: environment.groupPersistence
         )
         let vcsWorktreeAutoRefresher = VCSWorktreeAutoRefresher(
             appState: appState,
@@ -108,9 +107,6 @@ struct MuxyApp: App {
                             worktreeStore.removeProject(id)
                             groupStore.removeProjectFromAllGroups(projectID: id)
                         }
-                    }
-                    projectStore.onProjectAdded = { [groupStore] project in
-                        groupStore.addProjectToFirstGroupOrDefault(projectID: project.id)
                     }
                     projectStore.onProjectRemoved = { [groupStore] projectID in
                         groupStore.removeProjectFromAllGroups(projectID: projectID)
