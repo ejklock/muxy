@@ -1,209 +1,287 @@
 import SwiftUI
 
-struct ProjectGroupActions {
-    let onSelect: (Project) -> Void
-    let onRemove: (Project) -> Void
-    let onRename: (Project, String) -> Void
-    let onSetLogo: (Project, String?) -> Void
-    let onSetIconColor: (Project, String?) -> Void
-    let onRenameGroup: (String) -> Void
-    let onDeleteGroup: () -> Void
-    let onAddGroup: () -> Void
-    let onMoveProject: (Project, UUID) -> Void
-    let projectDragGesture: (Project) -> AnyGesture<DragGesture.Value>
-}
-
-struct ProjectGroupSection: View {
-    let group: ProjectGroup
-    let projects: [Project]
+struct WorkspaceSwitcher: View {
     let isWide: Bool
-    let draggedID: UUID?
-    let globalIndexOffset: Int
-    let actions: ProjectGroupActions
-    let allGroups: [ProjectGroup]
-    let publishGroupHeaderFrame: Bool
 
     @Environment(ProjectGroupStore.self) private var groupStore
 
-    @State private var isRenaming = false
+    @State private var isRenamingID: UUID?
     @State private var renameText = ""
+    @State private var isCreatingNew = false
+    @State private var newWorkspaceName = ""
+    @State private var isShowingPopover = false
+    @State private var isTriggerHovered = false
+
+    private var activeGroup: ProjectGroup? {
+        guard let id = groupStore.activeGroupID else { return nil }
+        return groupStore.groups.first(where: { $0.id == id })
+    }
+
+    private var activeLabel: String {
+        activeGroup?.name ?? "All Projects"
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            groupHeader
-            if group.isExpanded {
-                projectRows
-            }
-        }
-        .padding(UIMetrics.spacing1)
-        .overlay {
-            RoundedRectangle(cornerRadius: UIMetrics.radiusMD)
-                .strokeBorder(MuxyTheme.border, lineWidth: 1)
+        if isWide {
+            wideLayout
+        } else {
+            collapsedLayout
         }
     }
 
-    private var isAnyDragging: Bool { draggedID != nil }
-
-    private var groupHeader: some View {
-        HStack(spacing: UIMetrics.spacing2) {
-            if isWide {
-                wideGroupHeader
-            } else {
-                collapsedGroupHeader
-            }
-        }
-    }
-
-    private var wideGroupHeader: some View {
-        HStack(spacing: UIMetrics.spacing2) {
-            if isRenaming {
-                TextField("Group name", text: $renameText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
-                    .foregroundStyle(MuxyTheme.fgMuted)
-                    .onSubmit { commitRename() }
-                    .onExitCommand { cancelRename() }
-            } else {
-                Text(group.name.uppercased())
-                    .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
-                    .foregroundStyle(MuxyTheme.fgMuted)
-                    .lineLimit(1)
-            }
-            Spacer()
-            Image(systemName: group.isExpanded ? "chevron.down" : "chevron.right")
-                .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
-                .foregroundStyle(MuxyTheme.fgMuted)
-        }
-        .padding(.horizontal, UIMetrics.spacing2)
-        .padding(.vertical, UIMetrics.spacing1)
-        .contentShape(Rectangle())
-        .background { groupHeaderFramePublisher }
-        .onTapGesture {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                groupStore.toggleExpanded(groupID: group.id)
-            }
-        }
-        .contextMenu { groupContextMenu }
-    }
-
-    private var collapsedGroupHeader: some View {
-        VStack(spacing: UIMetrics.spacing1) {
-            Text(group.name.prefix(1).uppercased())
-                .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
-                .foregroundStyle(MuxyTheme.fgMuted)
-                .frame(width: UIMetrics.iconXXL)
-                .background(MuxyTheme.surface, in: RoundedRectangle(cornerRadius: UIMetrics.radiusSM))
-            Image(systemName: group.isExpanded ? "chevron.down" : "chevron.right")
-                .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
-                .foregroundStyle(MuxyTheme.fgMuted)
-                .frame(width: UIMetrics.iconXXL, height: UIMetrics.iconSM)
-        }
-        .contentShape(Rectangle())
-        .background { groupHeaderFramePublisher }
-        .onTapGesture {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                groupStore.toggleExpanded(groupID: group.id)
-            }
-        }
-        .contextMenu { groupContextMenu }
-    }
-
-    @ViewBuilder
-    private var groupHeaderFramePublisher: some View {
-        if publishGroupHeaderFrame {
-            GeometryReader { geo in
-                Color.clear.preference(
-                    key: UUIDFramePreferenceKey<SidebarGroupFrameTag>.self,
-                    value: [group.id: geo.frame(in: .named("sidebar"))]
+    private var wideLayout: some View {
+        VStack(alignment: .leading, spacing: UIMetrics.spacing1) {
+            Button {
+                isShowingPopover.toggle()
+            } label: {
+                HStack(spacing: UIMetrics.spacing2) {
+                    Text(activeLabel)
+                        .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
+                        .foregroundStyle(MuxyTheme.fgMuted)
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
+                        .foregroundStyle(MuxyTheme.fgMuted)
+                    Spacer()
+                }
+                .padding(.horizontal, UIMetrics.spacing4)
+                .padding(.vertical, UIMetrics.spacing3)
+                .background(
+                    isTriggerHovered ? MuxyTheme.hover : MuxyTheme.surface,
+                    in: RoundedRectangle(cornerRadius: UIMetrics.radiusMD)
                 )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { isTriggerHovered = $0 }
+            .popover(isPresented: $isShowingPopover, arrowEdge: .bottom) {
+                workspacePopover
+            }
+
+            if isCreatingNew {
+                newWorkspaceField
             }
         }
     }
 
-    @ViewBuilder
-    private var groupContextMenu: some View {
-        Button("Add New Group") { actions.onAddGroup() }
-        Divider()
-        Button("Rename Group") { startRename() }
-        Button("Delete Group", role: .destructive) { actions.onDeleteGroup() }
-    }
-
-    @ViewBuilder
-    private var projectRows: some View {
-        ForEach(Array(projects.enumerated()), id: \.element.id) { offset, project in
-            let shortcutIndex = globalIndexOffset + offset
-            Group {
-                if isWide {
-                    ExpandedProjectRow(
-                        project: project,
-                        shortcutIndex: shortcutIndex < 9 ? shortcutIndex + 1 : nil,
-                        isAnyDragging: isAnyDragging,
-                        onSelect: { actions.onSelect(project) },
-                        onRemove: { actions.onRemove(project) },
-                        onRename: { actions.onRename(project, $0) },
-                        onSetLogo: { actions.onSetLogo(project, $0) },
-                        onSetIconColor: { actions.onSetIconColor(project, $0) }
+    private var collapsedLayout: some View {
+        VStack(spacing: UIMetrics.spacing1) {
+            Button {
+                isShowingPopover.toggle()
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
+                    .foregroundStyle(MuxyTheme.fgMuted)
+                    .frame(width: UIMetrics.iconXXL, height: UIMetrics.iconXXL)
+                    .background(
+                        isTriggerHovered ? MuxyTheme.hover : MuxyTheme.surface,
+                        in: RoundedRectangle(cornerRadius: UIMetrics.radiusSM)
                     )
-                    .contextMenu { moveToGroupMenu(for: project) }
-                } else {
-                    ProjectRow(
-                        project: project,
-                        shortcutIndex: shortcutIndex < 9 ? shortcutIndex + 1 : nil,
-                        isAnyDragging: isAnyDragging,
-                        onSelect: { actions.onSelect(project) },
-                        onRemove: { actions.onRemove(project) },
-                        onRename: { actions.onRename(project, $0) },
-                        onSetLogo: { actions.onSetLogo(project, $0) },
-                        onSetIconColor: { actions.onSetIconColor(project, $0) }
-                    )
-                    .contextMenu { moveToGroupMenu(for: project) }
-                }
             }
-            .background {
-                if draggedID != nil {
-                    GeometryReader { geo in
-                        Color.clear.preference(
-                            key: UUIDFramePreferenceKey<SidebarFrameTag>.self,
-                            value: [project.id: geo.frame(in: .named("sidebar"))]
-                        )
-                    }
-                }
+            .buttonStyle(.plain)
+            .onHover { isTriggerHovered = $0 }
+            .popover(isPresented: $isShowingPopover, arrowEdge: .trailing) {
+                workspacePopover
             }
-            .gesture(actions.projectDragGesture(project))
+
+            if isCreatingNew {
+                newWorkspaceField
+            }
         }
+    }
+
+    private var workspacePopover: some View {
+        VStack(alignment: .leading, spacing: UIMetrics.spacing1) {
+            allProjectsRow
+            Divider()
+                .padding(.vertical, UIMetrics.spacing1)
+            ForEach(groupStore.groups) { group in
+                workspacePopoverRow(group)
+            }
+            if !groupStore.groups.isEmpty {
+                Divider()
+                    .padding(.vertical, UIMetrics.spacing1)
+            }
+            newWorkspaceButton
+            if isCreatingNew {
+                newWorkspaceField
+            }
+        }
+        .padding(UIMetrics.spacing3)
+        .frame(minWidth: 180)
+    }
+
+    private var allProjectsRow: some View {
+        Button {
+            groupStore.clearGroupSelection()
+            isShowingPopover = false
+        } label: {
+            HStack(spacing: UIMetrics.spacing2) {
+                Image(systemName: groupStore.activeGroupID == nil ? "checkmark" : "")
+                    .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
+                    .foregroundStyle(MuxyTheme.accent)
+                    .frame(width: UIMetrics.fontCaption)
+                Text("All Projects")
+                    .font(.system(size: UIMetrics.fontBody, weight: .medium))
+                    .foregroundStyle(MuxyTheme.fg)
+                Spacer()
+            }
+            .padding(.horizontal, UIMetrics.spacing3)
+            .padding(.vertical, UIMetrics.spacing2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
-    private func moveToGroupMenu(for project: Project) -> some View {
-        let otherGroups = allGroups.filter { $0.id != group.id }
-        if !otherGroups.isEmpty {
-            Menu("Move to Group") {
-                ForEach(otherGroups) { targetGroup in
-                    Button(targetGroup.name) {
-                        actions.onMoveProject(project, targetGroup.id)
-                    }
-                }
-            }
+    private func workspacePopoverRow(_ group: ProjectGroup) -> some View {
+        if isRenamingID == group.id {
+            renameField(for: group)
+        } else {
+            workspaceSelectRow(group)
         }
     }
 
-    private func startRename() {
-        renameText = group.name
-        isRenaming = true
+    private func workspaceSelectRow(_ group: ProjectGroup) -> some View {
+        WorkspaceRow(
+            group: group,
+            isActive: groupStore.activeGroupID == group.id,
+            onSelect: {
+                groupStore.selectGroup(id: group.id)
+                isShowingPopover = false
+            },
+            onRename: {
+                isRenamingID = group.id
+                renameText = group.name
+            },
+            onDelete: {
+                groupStore.removeGroup(id: group.id)
+            }
+        )
     }
 
-    private func commitRename() {
+    private func renameField(for group: ProjectGroup) -> some View {
+        TextField("Workspace name", text: $renameText)
+            .textFieldStyle(.plain)
+            .font(.system(size: UIMetrics.fontBody, weight: .medium))
+            .foregroundStyle(MuxyTheme.fg)
+            .padding(.horizontal, UIMetrics.spacing3)
+            .padding(.vertical, UIMetrics.spacing2)
+            .background(MuxyTheme.surface, in: RoundedRectangle(cornerRadius: UIMetrics.radiusMD))
+            .onSubmit { commitRename(id: group.id) }
+            .onExitCommand { cancelRename() }
+    }
+
+    private var newWorkspaceButton: some View {
+        Button {
+            isCreatingNew = true
+            newWorkspaceName = ""
+        } label: {
+            HStack(spacing: UIMetrics.spacing2) {
+                Image(systemName: "plus")
+                    .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
+                    .foregroundStyle(MuxyTheme.fgMuted)
+                Text("New Workspace")
+                    .font(.system(size: UIMetrics.fontBody, weight: .medium))
+                    .foregroundStyle(MuxyTheme.fgMuted)
+                Spacer()
+            }
+            .padding(.horizontal, UIMetrics.spacing3)
+            .padding(.vertical, UIMetrics.spacing2)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var newWorkspaceField: some View {
+        TextField("Workspace name", text: $newWorkspaceName)
+            .textFieldStyle(.plain)
+            .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
+            .foregroundStyle(MuxyTheme.fgMuted)
+            .padding(.horizontal, UIMetrics.spacing2)
+            .padding(.vertical, UIMetrics.spacing1)
+            .background(MuxyTheme.surface, in: RoundedRectangle(cornerRadius: UIMetrics.radiusMD))
+            .onSubmit { commitNewWorkspace() }
+            .onExitCommand { cancelNewWorkspace() }
+    }
+
+    private func commitRename(id: UUID) {
         let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             cancelRename()
             return
         }
-        actions.onRenameGroup(trimmed)
-        isRenaming = false
+        groupStore.renameGroup(id: id, to: trimmed)
+        isRenamingID = nil
+        renameText = ""
     }
 
     private func cancelRename() {
+        isRenamingID = nil
         renameText = ""
-        isRenaming = false
+    }
+
+    private func commitNewWorkspace() {
+        let trimmed = newWorkspaceName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            cancelNewWorkspace()
+            return
+        }
+        groupStore.addGroup(name: trimmed)
+        isCreatingNew = false
+        newWorkspaceName = ""
+    }
+
+    private func cancelNewWorkspace() {
+        isCreatingNew = false
+        newWorkspaceName = ""
+    }
+}
+
+private struct WorkspaceRow: View {
+    let group: ProjectGroup
+    let isActive: Bool
+    let onSelect: () -> Void
+    let onRename: () -> Void
+    let onDelete: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: onSelect) {
+            HStack(spacing: UIMetrics.spacing2) {
+                Image(systemName: isActive ? "checkmark" : "")
+                    .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
+                    .foregroundStyle(MuxyTheme.accent)
+                    .frame(width: UIMetrics.fontCaption)
+                Text(group.name)
+                    .font(.system(size: UIMetrics.fontBody, weight: .medium))
+                    .foregroundStyle(MuxyTheme.fg)
+                    .lineLimit(1)
+                Spacer()
+                if isHovered {
+                    HStack(spacing: UIMetrics.spacing1) {
+                        Button(action: onRename) {
+                            Image(systemName: "pencil")
+                                .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
+                                .foregroundStyle(MuxyTheme.fgMuted)
+                        }
+                        .buttonStyle(.plain)
+                        Button(action: onDelete) {
+                            Image(systemName: "trash")
+                                .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
+                                .foregroundStyle(MuxyTheme.fgMuted)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal, UIMetrics.spacing3)
+            .padding(.vertical, UIMetrics.spacing2)
+            .background(isHovered ? MuxyTheme.hover : Color.clear, in: RoundedRectangle(cornerRadius: UIMetrics.radiusMD))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
     }
 }
