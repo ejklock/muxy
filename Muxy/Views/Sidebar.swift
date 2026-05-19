@@ -29,6 +29,7 @@ enum SidebarLayout {
 struct Sidebar: View {
     @Environment(AppState.self) private var appState
     @Environment(ProjectStore.self) private var projectStore
+    @Environment(ProjectGroupStore.self) private var groupStore
     @Environment(WorktreeStore.self) private var worktreeStore
     @State private var dragState = ProjectDragState()
     let expanded: Bool
@@ -78,15 +79,21 @@ struct Sidebar: View {
         .help(shortcutTooltip("Add Project", for: .openProject))
     }
 
+    private var displayedProjects: [Project] {
+        groupStore.filteredProjects(from: projectStore.projects)
+    }
+
     private var projectList: some View {
         ScrollView(.vertical, showsIndicators: false) {
-            LazyVStack(spacing: UIMetrics.spacing2) {
-                ForEach(Array(projectStore.projects.enumerated()), id: \.element.id) { index, project in
+            LazyVStack(spacing: UIMetrics.spacing3) {
+                WorkspaceSwitcher(isWide: isWide)
+
+                ForEach(Array(displayedProjects.enumerated()), id: \.element.id) { offset, project in
                     Group {
                         if isWide {
                             ExpandedProjectRow(
                                 project: project,
-                                shortcutIndex: index < 9 ? index + 1 : nil,
+                                shortcutIndex: offset < 9 ? offset + 1 : nil,
                                 isAnyDragging: dragState.draggedID != nil,
                                 onSelect: { select(project) },
                                 onRemove: { remove(project) },
@@ -94,10 +101,11 @@ struct Sidebar: View {
                                 onSetLogo: { projectStore.setLogo(id: project.id, to: $0) },
                                 onSetIconColor: { projectStore.setIconColor(id: project.id, to: $0) }
                             )
+                            .contextMenu { workspaceContextMenu(for: project) }
                         } else {
                             ProjectRow(
                                 project: project,
-                                shortcutIndex: index < 9 ? index + 1 : nil,
+                                shortcutIndex: offset < 9 ? offset + 1 : nil,
                                 isAnyDragging: dragState.draggedID != nil,
                                 onSelect: { select(project) },
                                 onRemove: { remove(project) },
@@ -105,6 +113,7 @@ struct Sidebar: View {
                                 onSetLogo: { projectStore.setLogo(id: project.id, to: $0) },
                                 onSetIconColor: { projectStore.setIconColor(id: project.id, to: $0) }
                             )
+                            .contextMenu { workspaceContextMenu(for: project) }
                         }
                     }
                     .background {
@@ -119,6 +128,7 @@ struct Sidebar: View {
                     }
                     .gesture(projectDragGesture(for: project))
                 }
+
                 addButton
             }
             .padding(.horizontal, isWide ? UIMetrics.spacing3 : UIMetrics.spacing4)
@@ -135,22 +145,24 @@ struct Sidebar: View {
         "\(name) (\(KeyBindingStore.shared.combo(for: action).displayString))"
     }
 
-    private func projectDragGesture(for project: Project) -> some Gesture {
-        DragGesture(minimumDistance: 6, coordinateSpace: .named("sidebar"))
-            .onChanged { value in
-                if dragState.draggedID == nil {
-                    dragState.draggedID = project.id
-                    dragState.lastReorderTargetID = nil
+    private func projectDragGesture(for project: Project) -> AnyGesture<DragGesture.Value> {
+        AnyGesture(
+            DragGesture(minimumDistance: 6, coordinateSpace: .named("sidebar"))
+                .onChanged { value in
+                    if dragState.draggedID == nil {
+                        dragState.draggedID = project.id
+                        dragState.lastReorderTargetID = nil
+                    }
+                    reorderIfNeeded(at: value.location)
                 }
-                reorderIfNeeded(at: value.location)
-            }
-            .onEnded { _ in
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    dragState.draggedID = nil
-                    dragState.frames = [:]
-                    dragState.lastReorderTargetID = nil
+                .onEnded { _ in
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        dragState.draggedID = nil
+                        dragState.frames = [:]
+                        dragState.lastReorderTargetID = nil
+                    }
                 }
-            }
+        )
     }
 
     private func select(_ project: Project) {
@@ -174,30 +186,53 @@ struct Sidebar: View {
         worktreeStore.removeProject(project.id)
     }
 
+    @ViewBuilder
+    private func workspaceContextMenu(for project: Project) -> some View {
+        let activeGroupID = groupStore.activeGroupID
+        let isInActiveWorkspace = activeGroupID.map { id in
+            groupStore.groups.first(where: { $0.id == id })?.projectIDs.contains(project.id) ?? false
+        } ?? false
+
+        if let activeGroupID, isInActiveWorkspace {
+            Button("Remove from Workspace") {
+                groupStore.removeProject(projectID: project.id, fromGroup: activeGroupID)
+            }
+        } else {
+            let eligibleGroups = groupStore.groups.filter { group in
+                !group.projectIDs.contains(project.id)
+            }
+            if !eligibleGroups.isEmpty {
+                Menu("Add to Workspace") {
+                    ForEach(eligibleGroups) { group in
+                        Button(group.name) {
+                            groupStore.addProject(projectID: project.id, toGroup: group.id)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private func reorderIfNeeded(at location: CGPoint) {
         guard let draggedID = dragState.draggedID else { return }
-        var hoveredTargetID: UUID?
 
         for (id, frame) in dragState.frames where id != draggedID {
             guard frame.contains(location) else { continue }
-            hoveredTargetID = id
             guard dragState.lastReorderTargetID != id else { return }
+
+            dragState.lastReorderTargetID = id
 
             guard let sourceIndex = projectStore.projects.firstIndex(where: { $0.id == draggedID }),
                   let destIndex = projectStore.projects.firstIndex(where: { $0.id == id })
             else { return }
-
-            dragState.lastReorderTargetID = id
-            let offset = destIndex > sourceIndex ? destIndex + 1 : destIndex
+            let insertOffset = destIndex > sourceIndex ? destIndex + 1 : destIndex
             withAnimation(.easeInOut(duration: 0.15)) {
-                projectStore.reorder(
-                    fromOffsets: IndexSet(integer: sourceIndex), toOffset: offset
-                )
+                projectStore.reorder(fromOffsets: IndexSet(integer: sourceIndex), toOffset: insertOffset)
             }
             return
         }
 
-        if hoveredTargetID == nil {
+        if !dragState.frames.values.contains(where: { $0.contains(location) }) {
             dragState.lastReorderTargetID = nil
         }
     }

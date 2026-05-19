@@ -115,6 +115,14 @@ final class TabArea: Identifiable {
         insertTab(TerminalTab(webViewState: WebViewTabState(projectPath: projectPath)))
     }
 
+    func createWebViewTab(urlString: String, title: String) {
+        insertTab(TerminalTab(webViewState: WebViewTabState(
+            projectPath: projectPath,
+            urlString: urlString,
+            displayTitle: title
+        )))
+    }
+
     func createDiffViewerTab(vcs: VCSTabState, filePath: String, isStaged: Bool) {
         if let existing = tabs.first(where: { tab in
             guard let diff = tab.content.diffViewerState else { return false }

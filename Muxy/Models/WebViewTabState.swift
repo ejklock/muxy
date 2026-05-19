@@ -12,10 +12,10 @@ final class WebViewTabState: Identifiable {
     var canGoForward = false
     var loadVersion = 0
 
-    init(projectPath: String, urlString: String = "https://www.google.com") {
+    init(projectPath: String, urlString: String = "https://www.google.com", displayTitle: String = "Browser") {
         self.projectPath = projectPath
         self.urlString = urlString
-        displayTitle = "Browser"
+        self.displayTitle = displayTitle
     }
 
     func requestLoad(_ urlString: String) {
