@@ -14,7 +14,7 @@ struct ProjectRow: View {
 
     @Environment(AppState.self) private var appState
     @Environment(WorktreeStore.self) private var worktreeStore
-    @Environment(ProjectGroupStore.self) private var groupStore
+    @Environment(ProjectWorkspaceStore.self) private var projectWorkspaceStore
 
     @State private var hovered = false
     @State private var isRenaming = false
@@ -80,7 +80,7 @@ struct ProjectRow: View {
                         Button("Switch Worktree…") { showWorktreePopover = true }
                     }
                 }
-                if !groupStore.groups.isEmpty {
+                if !projectWorkspaceStore.workspaces.isEmpty {
                     Divider()
                     WorkspaceMembershipMenu(project: project)
                 }

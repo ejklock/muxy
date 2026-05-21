@@ -1,6 +1,6 @@
 import Foundation
 
-struct ProjectGroup: Identifiable, Codable, Hashable {
+struct ProjectWorkspace: Identifiable, Codable, Hashable {
     let id: UUID
     var name: String
     var sortOrder: Int

@@ -9,7 +9,7 @@ struct MuxyApp: App {
     @State private var appState: AppState
     @State private var projectStore: ProjectStore
     @State private var worktreeStore: WorktreeStore
-    @State private var groupStore: ProjectGroupStore
+    @State private var projectWorkspaceStore: ProjectWorkspaceStore
     @State private var vcsWorktreeAutoRefresher: VCSWorktreeAutoRefresher
     private let updateService = UpdateService.shared
 
@@ -30,8 +30,8 @@ struct MuxyApp: App {
             projects: projectStore.projects,
             worktrees: worktreeStore.worktrees
         )
-        let groupStore = ProjectGroupStore(
-            persistence: environment.groupPersistence
+        let projectWorkspaceStore = ProjectWorkspaceStore(
+            persistence: environment.projectWorkspacePersistence
         )
         let vcsWorktreeAutoRefresher = VCSWorktreeAutoRefresher(
             appState: appState,
@@ -41,7 +41,7 @@ struct MuxyApp: App {
         _appState = State(initialValue: appState)
         _projectStore = State(initialValue: projectStore)
         _worktreeStore = State(initialValue: worktreeStore)
-        _groupStore = State(initialValue: groupStore)
+        _projectWorkspaceStore = State(initialValue: projectWorkspaceStore)
         _vcsWorktreeAutoRefresher = State(initialValue: vcsWorktreeAutoRefresher)
     }
 
@@ -51,7 +51,7 @@ struct MuxyApp: App {
                 .environment(appState)
                 .environment(projectStore)
                 .environment(worktreeStore)
-                .environment(groupStore)
+                .environment(projectWorkspaceStore)
                 .environment(GhosttyService.shared)
                 .environment(MuxyConfig.shared)
                 .environment(ThemeService.shared)
@@ -92,7 +92,7 @@ struct MuxyApp: App {
                         delegate.server = server
                         return delegate
                     }
-                    appState.onProjectsEmptied = { [projectStore, worktreeStore, groupStore] projectIDs in
+                    appState.onProjectsEmptied = { [projectStore, worktreeStore] projectIDs in
                         for id in projectIDs {
                             if let project = projectStore.projects.first(where: { $0.id == id }) {
                                 let knownWorktrees = worktreeStore.list(for: id)
@@ -105,11 +105,10 @@ struct MuxyApp: App {
                             }
                             projectStore.remove(id: id)
                             worktreeStore.removeProject(id)
-                            groupStore.removeProjectFromAllGroups(projectID: id)
                         }
                     }
-                    projectStore.onProjectRemoved = { [groupStore] projectID in
-                        groupStore.removeProjectFromAllGroups(projectID: projectID)
+                    projectStore.onProjectRemoved = { [projectWorkspaceStore] projectID in
+                        projectWorkspaceStore.removeProjectFromAllWorkspaces(projectID: projectID)
                     }
                 }
         }
@@ -133,7 +132,7 @@ struct MuxyApp: App {
                 .environment(appState)
                 .environment(projectStore)
                 .environment(worktreeStore)
-                .environment(groupStore)
+                .environment(projectWorkspaceStore)
                 .environment(GhosttyService.shared)
                 .preferredColorScheme(MuxyTheme.colorScheme)
         }

@@ -8,7 +8,6 @@ private let logger = Logger(subsystem: "app.muxy", category: "ProjectStore")
 final class ProjectStore {
     private(set) var projects: [Project] = []
     private let persistence: any ProjectPersisting
-    var onProjectAdded: ((Project) -> Void)?
     var onProjectRemoved: ((UUID) -> Void)?
 
     init(persistence: any ProjectPersisting) {
@@ -19,7 +18,6 @@ final class ProjectStore {
     func add(_ project: Project) {
         projects.append(project)
         save()
-        onProjectAdded?(project)
     }
 
     func remove(id: UUID) {

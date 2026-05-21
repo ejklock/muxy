@@ -29,7 +29,7 @@ enum SidebarLayout {
 struct Sidebar: View {
     @Environment(AppState.self) private var appState
     @Environment(ProjectStore.self) private var projectStore
-    @Environment(ProjectGroupStore.self) private var groupStore
+    @Environment(ProjectWorkspaceStore.self) private var projectWorkspaceStore
     @Environment(WorktreeStore.self) private var worktreeStore
     @State private var dragState = ProjectDragState()
     let expanded: Bool
@@ -80,7 +80,7 @@ struct Sidebar: View {
     }
 
     private var displayedProjects: [Project] {
-        groupStore.filteredProjects(from: projectStore.projects)
+        projectWorkspaceStore.filteredProjects(from: projectStore.projects)
     }
 
     private var projectList: some View {
@@ -143,24 +143,22 @@ struct Sidebar: View {
         "\(name) (\(KeyBindingStore.shared.combo(for: action).displayString))"
     }
 
-    private func projectDragGesture(for project: Project) -> AnyGesture<DragGesture.Value> {
-        AnyGesture(
-            DragGesture(minimumDistance: 6, coordinateSpace: .named("sidebar"))
-                .onChanged { value in
-                    if dragState.draggedID == nil {
-                        dragState.draggedID = project.id
-                        dragState.lastReorderTargetID = nil
-                    }
-                    reorderIfNeeded(at: value.location)
+    private func projectDragGesture(for project: Project) -> some Gesture {
+        DragGesture(minimumDistance: 6, coordinateSpace: .named("sidebar"))
+            .onChanged { value in
+                if dragState.draggedID == nil {
+                    dragState.draggedID = project.id
+                    dragState.lastReorderTargetID = nil
                 }
-                .onEnded { _ in
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        dragState.draggedID = nil
-                        dragState.frames = [:]
-                        dragState.lastReorderTargetID = nil
-                    }
+                reorderIfNeeded(at: value.location)
+            }
+            .onEnded { _ in
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    dragState.draggedID = nil
+                    dragState.frames = [:]
+                    dragState.lastReorderTargetID = nil
                 }
-        )
+            }
     }
 
     private func select(_ project: Project) {
@@ -186,24 +184,28 @@ struct Sidebar: View {
 
     private func reorderIfNeeded(at location: CGPoint) {
         guard let draggedID = dragState.draggedID else { return }
+        var hoveredTargetID: UUID?
 
         for (id, frame) in dragState.frames where id != draggedID {
             guard frame.contains(location) else { continue }
+            hoveredTargetID = id
             guard dragState.lastReorderTargetID != id else { return }
-
-            dragState.lastReorderTargetID = id
 
             guard let sourceIndex = projectStore.projects.firstIndex(where: { $0.id == draggedID }),
                   let destIndex = projectStore.projects.firstIndex(where: { $0.id == id })
             else { return }
-            let insertOffset = destIndex > sourceIndex ? destIndex + 1 : destIndex
+
+            dragState.lastReorderTargetID = id
+            let offset = destIndex > sourceIndex ? destIndex + 1 : destIndex
             withAnimation(.easeInOut(duration: 0.15)) {
-                projectStore.reorder(fromOffsets: IndexSet(integer: sourceIndex), toOffset: insertOffset)
+                projectStore.reorder(
+                    fromOffsets: IndexSet(integer: sourceIndex), toOffset: offset
+                )
             }
             return
         }
 
-        if !dragState.frames.values.contains(where: { $0.contains(location) }) {
+        if hoveredTargetID == nil {
             dragState.lastReorderTargetID = nil
         }
     }

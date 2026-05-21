@@ -3,20 +3,20 @@ import SwiftUI
 struct WorkspaceSwitcher: View {
     let isWide: Bool
 
-    @Environment(ProjectGroupStore.self) private var groupStore
+    @Environment(ProjectWorkspaceStore.self) private var projectWorkspaceStore
 
     @State private var isShowingPopover = false
     @State private var isTriggerHovered = false
     @State private var editorMode: WorkspaceEditorMode?
-    @State private var groupPendingDelete: ProjectGroup?
+    @State private var workspacePendingDelete: ProjectWorkspace?
 
-    private var activeGroup: ProjectGroup? {
-        guard let id = groupStore.activeGroupID else { return nil }
-        return groupStore.groups.first(where: { $0.id == id })
+    private var activeWorkspace: ProjectWorkspace? {
+        guard let id = projectWorkspaceStore.activeWorkspaceID else { return nil }
+        return projectWorkspaceStore.workspaces.first(where: { $0.id == id })
     }
 
     private var activeLabel: String {
-        activeGroup?.name ?? "All Projects"
+        activeWorkspace?.name ?? "All Projects"
     }
 
     var body: some View {
@@ -38,17 +38,17 @@ struct WorkspaceSwitcher: View {
             )
         }
         .alert(
-            "Delete “\(groupPendingDelete?.name ?? "")”?",
+            "Delete “\(workspacePendingDelete?.name ?? "")”?",
             isPresented: deleteAlertBinding,
-            presenting: groupPendingDelete
-        ) { group in
+            presenting: workspacePendingDelete
+        ) { workspace in
             Button("Delete", role: .destructive) {
-                groupStore.removeGroup(id: group.id)
-                groupPendingDelete = nil
+                projectWorkspaceStore.removeWorkspace(id: workspace.id)
+                workspacePendingDelete = nil
             }
             .keyboardShortcut(.defaultAction)
             Button("Cancel", role: .cancel) {
-                groupPendingDelete = nil
+                workspacePendingDelete = nil
             }
         } message: { _ in
             Text("Projects in this workspace will not be deleted.")
@@ -109,25 +109,25 @@ struct WorkspaceSwitcher: View {
             allProjectsRow
             Divider()
                 .padding(.vertical, UIMetrics.spacing1)
-            ForEach(groupStore.groups) { group in
+            ForEach(projectWorkspaceStore.workspaces) { workspace in
                 WorkspaceRow(
-                    group: group,
-                    isActive: groupStore.activeGroupID == group.id,
+                    workspace: workspace,
+                    isActive: projectWorkspaceStore.activeWorkspaceID == workspace.id,
                     onSelect: {
-                        groupStore.selectGroup(id: group.id)
+                        projectWorkspaceStore.selectWorkspace(id: workspace.id)
                         isShowingPopover = false
                     },
                     onRename: {
                         isShowingPopover = false
-                        editorMode = .rename(group)
+                        editorMode = .rename(workspace)
                     },
                     onDelete: {
                         isShowingPopover = false
-                        groupPendingDelete = group
+                        workspacePendingDelete = workspace
                     }
                 )
             }
-            if !groupStore.groups.isEmpty {
+            if !projectWorkspaceStore.workspaces.isEmpty {
                 Divider()
                     .padding(.vertical, UIMetrics.spacing1)
             }
@@ -139,11 +139,11 @@ struct WorkspaceSwitcher: View {
 
     private var allProjectsRow: some View {
         Button {
-            groupStore.clearGroupSelection()
+            projectWorkspaceStore.clearWorkspaceSelection()
             isShowingPopover = false
         } label: {
             HStack(spacing: UIMetrics.spacing2) {
-                Image(systemName: groupStore.activeGroupID == nil ? "checkmark" : "")
+                Image(systemName: projectWorkspaceStore.activeWorkspaceID == nil ? "checkmark" : "")
                     .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
                     .foregroundStyle(MuxyTheme.accent)
                     .frame(width: UIMetrics.fontCaption)
@@ -183,10 +183,10 @@ struct WorkspaceSwitcher: View {
 
     private var deleteAlertBinding: Binding<Bool> {
         Binding(
-            get: { groupPendingDelete != nil },
+            get: { workspacePendingDelete != nil },
             set: { newValue in
                 if !newValue {
-                    groupPendingDelete = nil
+                    workspacePendingDelete = nil
                 }
             }
         )
@@ -197,21 +197,21 @@ struct WorkspaceSwitcher: View {
         guard !trimmed.isEmpty else { return }
         switch mode {
         case .create:
-            groupStore.addGroup(name: trimmed)
-        case let .rename(group):
-            groupStore.renameGroup(id: group.id, to: trimmed)
+            projectWorkspaceStore.addWorkspace(name: trimmed)
+        case let .rename(workspace):
+            projectWorkspaceStore.renameWorkspace(id: workspace.id, to: trimmed)
         }
     }
 }
 
 enum WorkspaceEditorMode: Identifiable {
     case create
-    case rename(ProjectGroup)
+    case rename(ProjectWorkspace)
 
     var id: String {
         switch self {
         case .create: "create"
-        case let .rename(group): "rename-\(group.id.uuidString)"
+        case let .rename(workspace): "rename-\(workspace.id.uuidString)"
         }
     }
 
@@ -232,7 +232,7 @@ enum WorkspaceEditorMode: Identifiable {
     var initialName: String {
         switch self {
         case .create: ""
-        case let .rename(group): group.name
+        case let .rename(workspace): workspace.name
         }
     }
 }
@@ -240,24 +240,20 @@ enum WorkspaceEditorMode: Identifiable {
 struct WorkspaceMembershipMenu: View {
     let project: Project
 
-    @Environment(ProjectGroupStore.self) private var groupStore
+    @Environment(ProjectWorkspaceStore.self) private var projectWorkspaceStore
 
     var body: some View {
         Menu("Move to Workspace") {
-            ForEach(groupStore.groups) { group in
-                let isInGroup = group.projectIDs.contains(project.id)
+            ForEach(projectWorkspaceStore.workspaces) { workspace in
+                let isInWorkspace = workspace.projectIDs.contains(project.id)
                 Button {
-                    if isInGroup {
-                        groupStore.removeProject(projectID: project.id, fromGroup: group.id)
+                    if isInWorkspace {
+                        projectWorkspaceStore.removeProject(projectID: project.id, fromWorkspace: workspace.id)
                     } else {
-                        groupStore.addProject(projectID: project.id, toGroup: group.id)
+                        projectWorkspaceStore.addProject(projectID: project.id, toWorkspace: workspace.id)
                     }
                 } label: {
-                    if isInGroup {
-                        Label(group.name, systemImage: "checkmark")
-                    } else {
-                        Text(group.name)
-                    }
+                    Label(workspace.name, systemImage: isInWorkspace ? "checkmark" : "")
                 }
             }
         }
@@ -265,7 +261,7 @@ struct WorkspaceMembershipMenu: View {
 }
 
 private struct WorkspaceRow: View {
-    let group: ProjectGroup
+    let workspace: ProjectWorkspace
     let isActive: Bool
     let onSelect: () -> Void
     let onRename: () -> Void
@@ -280,7 +276,7 @@ private struct WorkspaceRow: View {
                     .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
                     .foregroundStyle(MuxyTheme.accent)
                     .frame(width: UIMetrics.fontCaption)
-                Text(group.name)
+                Text(workspace.name)
                     .font(.system(size: UIMetrics.fontBody, weight: .medium))
                     .foregroundStyle(MuxyTheme.fg)
                     .lineLimit(1)
