@@ -14,7 +14,7 @@ struct ExpandedProjectRow: View {
 
     @Environment(AppState.self) private var appState
     @Environment(WorktreeStore.self) private var worktreeStore
-    @Environment(ProjectWorkspaceStore.self) private var projectWorkspaceStore
+    @Environment(ProjectGroupStore.self) private var projectGroupStore
 
     @AppStorage(GeneralSettingsKeys.autoExpandWorktreesOnProjectSwitch)
     private var autoExpandWorktrees = false
@@ -84,9 +84,9 @@ struct ExpandedProjectRow: View {
                 Button("Refresh Worktrees") { Task { await refreshWorktrees() } }
                 Button("New Worktree…") { showCreateWorktreeSheet = true }
             }
-            if !projectWorkspaceStore.workspaces.isEmpty {
+            if !projectGroupStore.groups.isEmpty {
                 Divider()
-                WorkspaceMembershipMenu(project: project)
+                ProjectGroupMembershipMenu(project: project)
             }
             Divider()
             Button("Remove Project", role: .destructive, action: onRemove)

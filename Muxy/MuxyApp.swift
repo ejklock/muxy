@@ -9,7 +9,7 @@ struct MuxyApp: App {
     @State private var appState: AppState
     @State private var projectStore: ProjectStore
     @State private var worktreeStore: WorktreeStore
-    @State private var projectWorkspaceStore: ProjectWorkspaceStore
+    @State private var projectGroupStore: ProjectGroupStore
     @State private var vcsWorktreeAutoRefresher: VCSWorktreeAutoRefresher
     private let updateService = UpdateService.shared
 
@@ -30,8 +30,8 @@ struct MuxyApp: App {
             projects: projectStore.projects,
             worktrees: worktreeStore.worktrees
         )
-        let projectWorkspaceStore = ProjectWorkspaceStore(
-            persistence: environment.projectWorkspacePersistence
+        let projectGroupStore = ProjectGroupStore(
+            persistence: environment.projectGroupPersistence
         )
         let vcsWorktreeAutoRefresher = VCSWorktreeAutoRefresher(
             appState: appState,
@@ -41,7 +41,7 @@ struct MuxyApp: App {
         _appState = State(initialValue: appState)
         _projectStore = State(initialValue: projectStore)
         _worktreeStore = State(initialValue: worktreeStore)
-        _projectWorkspaceStore = State(initialValue: projectWorkspaceStore)
+        _projectGroupStore = State(initialValue: projectGroupStore)
         _vcsWorktreeAutoRefresher = State(initialValue: vcsWorktreeAutoRefresher)
     }
 
@@ -51,7 +51,7 @@ struct MuxyApp: App {
                 .environment(appState)
                 .environment(projectStore)
                 .environment(worktreeStore)
-                .environment(projectWorkspaceStore)
+                .environment(projectGroupStore)
                 .environment(GhosttyService.shared)
                 .environment(MuxyConfig.shared)
                 .environment(ThemeService.shared)
@@ -107,8 +107,8 @@ struct MuxyApp: App {
                             worktreeStore.removeProject(id)
                         }
                     }
-                    projectStore.onProjectRemoved = { [projectWorkspaceStore] projectID in
-                        projectWorkspaceStore.removeProjectFromAllWorkspaces(projectID: projectID)
+                    projectStore.onProjectRemoved = { [projectGroupStore] projectID in
+                        projectGroupStore.removeProjectFromAllGroups(projectID: projectID)
                     }
                 }
         }
@@ -119,6 +119,7 @@ struct MuxyApp: App {
                 appState: appState,
                 projectStore: projectStore,
                 worktreeStore: worktreeStore,
+                projectGroupStore: projectGroupStore,
                 keyBindings: .shared,
                 commandShortcuts: .shared,
                 config: .shared,
@@ -132,7 +133,7 @@ struct MuxyApp: App {
                 .environment(appState)
                 .environment(projectStore)
                 .environment(worktreeStore)
-                .environment(projectWorkspaceStore)
+                .environment(projectGroupStore)
                 .environment(GhosttyService.shared)
                 .preferredColorScheme(MuxyTheme.colorScheme)
         }

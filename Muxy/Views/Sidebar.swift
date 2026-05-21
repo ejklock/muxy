@@ -29,7 +29,7 @@ enum SidebarLayout {
 struct Sidebar: View {
     @Environment(AppState.self) private var appState
     @Environment(ProjectStore.self) private var projectStore
-    @Environment(ProjectWorkspaceStore.self) private var projectWorkspaceStore
+    @Environment(ProjectGroupStore.self) private var projectGroupStore
     @Environment(WorktreeStore.self) private var worktreeStore
     @State private var dragState = ProjectDragState()
     let expanded: Bool
@@ -80,7 +80,7 @@ struct Sidebar: View {
     }
 
     private var displayedProjects: [Project] {
-        projectWorkspaceStore.filteredProjects(from: projectStore.projects)
+        projectGroupStore.filteredProjects(from: projectStore.projects)
     }
 
     private var projectList: some View {
