@@ -14,6 +14,7 @@ struct ProjectRow: View {
 
     @Environment(AppState.self) private var appState
     @Environment(WorktreeStore.self) private var worktreeStore
+    @Environment(ProjectGroupStore.self) private var groupStore
 
     @State private var hovered = false
     @State private var isRenaming = false
@@ -78,6 +79,10 @@ struct ProjectRow: View {
                     if worktrees.count > 1 {
                         Button("Switch Worktree…") { showWorktreePopover = true }
                     }
+                }
+                if !groupStore.groups.isEmpty {
+                    Divider()
+                    WorkspaceMembershipMenu(project: project)
                 }
                 Divider()
                 Button("Remove Project", role: .destructive, action: onRemove)

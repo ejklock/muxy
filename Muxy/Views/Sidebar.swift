@@ -101,7 +101,6 @@ struct Sidebar: View {
                                 onSetLogo: { projectStore.setLogo(id: project.id, to: $0) },
                                 onSetIconColor: { projectStore.setIconColor(id: project.id, to: $0) }
                             )
-                            .contextMenu { workspaceContextMenu(for: project) }
                         } else {
                             ProjectRow(
                                 project: project,
@@ -113,7 +112,6 @@ struct Sidebar: View {
                                 onSetLogo: { projectStore.setLogo(id: project.id, to: $0) },
                                 onSetIconColor: { projectStore.setIconColor(id: project.id, to: $0) }
                             )
-                            .contextMenu { workspaceContextMenu(for: project) }
                         }
                     }
                     .background {
@@ -184,33 +182,6 @@ struct Sidebar: View {
         appState.removeProject(project.id)
         projectStore.remove(id: project.id)
         worktreeStore.removeProject(project.id)
-    }
-
-    @ViewBuilder
-    private func workspaceContextMenu(for project: Project) -> some View {
-        let activeGroupID = groupStore.activeGroupID
-        let isInActiveWorkspace = activeGroupID.map { id in
-            groupStore.groups.first(where: { $0.id == id })?.projectIDs.contains(project.id) ?? false
-        } ?? false
-
-        if let activeGroupID, isInActiveWorkspace {
-            Button("Remove from Workspace") {
-                groupStore.removeProject(projectID: project.id, fromGroup: activeGroupID)
-            }
-        } else {
-            let eligibleGroups = groupStore.groups.filter { group in
-                !group.projectIDs.contains(project.id)
-            }
-            if !eligibleGroups.isEmpty {
-                Menu("Add to Workspace") {
-                    ForEach(eligibleGroups) { group in
-                        Button(group.name) {
-                            groupStore.addProject(projectID: project.id, toGroup: group.id)
-                        }
-                    }
-                }
-            }
-        }
     }
 
     private func reorderIfNeeded(at location: CGPoint) {

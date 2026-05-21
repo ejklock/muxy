@@ -5,12 +5,10 @@ struct WorkspaceSwitcher: View {
 
     @Environment(ProjectGroupStore.self) private var groupStore
 
-    @State private var isRenamingID: UUID?
-    @State private var renameText = ""
-    @State private var isCreatingNew = false
-    @State private var newWorkspaceName = ""
     @State private var isShowingPopover = false
     @State private var isTriggerHovered = false
+    @State private var editorMode: WorkspaceEditorMode?
+    @State private var groupPendingDelete: ProjectGroup?
 
     private var activeGroup: ProjectGroup? {
         guard let id = groupStore.activeGroupID else { return nil }
@@ -22,71 +20,87 @@ struct WorkspaceSwitcher: View {
     }
 
     var body: some View {
-        if isWide {
-            wideLayout
-        } else {
-            collapsedLayout
+        Group {
+            if isWide {
+                wideLayout
+            } else {
+                collapsedLayout
+            }
+        }
+        .sheet(item: $editorMode) { mode in
+            WorkspaceEditorSheet(
+                mode: mode,
+                onSubmit: { name in
+                    apply(mode: mode, name: name)
+                    editorMode = nil
+                },
+                onCancel: { editorMode = nil }
+            )
+        }
+        .alert(
+            "Delete “\(groupPendingDelete?.name ?? "")”?",
+            isPresented: deleteAlertBinding,
+            presenting: groupPendingDelete
+        ) { group in
+            Button("Delete", role: .destructive) {
+                groupStore.removeGroup(id: group.id)
+                groupPendingDelete = nil
+            }
+            .keyboardShortcut(.defaultAction)
+            Button("Cancel", role: .cancel) {
+                groupPendingDelete = nil
+            }
+        } message: { _ in
+            Text("Projects in this workspace will not be deleted.")
         }
     }
 
     private var wideLayout: some View {
-        VStack(alignment: .leading, spacing: UIMetrics.spacing1) {
-            Button {
-                isShowingPopover.toggle()
-            } label: {
-                HStack(spacing: UIMetrics.spacing2) {
-                    Text(activeLabel)
-                        .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
-                        .foregroundStyle(MuxyTheme.fgMuted)
-                        .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
-                        .foregroundStyle(MuxyTheme.fgMuted)
-                    Spacer()
-                }
-                .padding(.horizontal, UIMetrics.spacing4)
-                .padding(.vertical, UIMetrics.spacing3)
-                .background(
-                    isTriggerHovered ? MuxyTheme.hover : MuxyTheme.surface,
-                    in: RoundedRectangle(cornerRadius: UIMetrics.radiusMD)
-                )
-                .contentShape(Rectangle())
+        Button {
+            isShowingPopover.toggle()
+        } label: {
+            HStack(spacing: UIMetrics.spacing2) {
+                Text(activeLabel)
+                    .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
+                    .foregroundStyle(MuxyTheme.fgMuted)
+                    .lineLimit(1)
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
+                    .foregroundStyle(MuxyTheme.fgMuted)
             }
-            .buttonStyle(.plain)
-            .onHover { isTriggerHovered = $0 }
-            .popover(isPresented: $isShowingPopover, arrowEdge: .bottom) {
-                workspacePopover
-            }
-
-            if isCreatingNew {
-                newWorkspaceField
-            }
+            .padding(.horizontal, UIMetrics.spacing4)
+            .padding(.vertical, UIMetrics.spacing3)
+            .background(
+                isTriggerHovered ? MuxyTheme.hover : MuxyTheme.surface,
+                in: RoundedRectangle(cornerRadius: UIMetrics.radiusMD)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isTriggerHovered = $0 }
+        .popover(isPresented: $isShowingPopover, arrowEdge: .bottom) {
+            workspacePopover
         }
     }
 
     private var collapsedLayout: some View {
-        VStack(spacing: UIMetrics.spacing1) {
-            Button {
-                isShowingPopover.toggle()
-            } label: {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
-                    .foregroundStyle(MuxyTheme.fgMuted)
-                    .frame(width: UIMetrics.iconXXL, height: UIMetrics.iconXXL)
-                    .background(
-                        isTriggerHovered ? MuxyTheme.hover : MuxyTheme.surface,
-                        in: RoundedRectangle(cornerRadius: UIMetrics.radiusSM)
-                    )
-            }
-            .buttonStyle(.plain)
-            .onHover { isTriggerHovered = $0 }
-            .popover(isPresented: $isShowingPopover, arrowEdge: .trailing) {
-                workspacePopover
-            }
-
-            if isCreatingNew {
-                newWorkspaceField
-            }
+        Button {
+            isShowingPopover.toggle()
+        } label: {
+            Image(systemName: "chevron.down")
+                .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
+                .foregroundStyle(MuxyTheme.fgMuted)
+                .frame(width: UIMetrics.iconXXL, height: UIMetrics.iconXXL)
+                .background(
+                    isTriggerHovered ? MuxyTheme.hover : MuxyTheme.surface,
+                    in: RoundedRectangle(cornerRadius: UIMetrics.radiusSM)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { isTriggerHovered = $0 }
+        .popover(isPresented: $isShowingPopover, arrowEdge: .trailing) {
+            workspacePopover
         }
     }
 
@@ -96,16 +110,28 @@ struct WorkspaceSwitcher: View {
             Divider()
                 .padding(.vertical, UIMetrics.spacing1)
             ForEach(groupStore.groups) { group in
-                workspacePopoverRow(group)
+                WorkspaceRow(
+                    group: group,
+                    isActive: groupStore.activeGroupID == group.id,
+                    onSelect: {
+                        groupStore.selectGroup(id: group.id)
+                        isShowingPopover = false
+                    },
+                    onRename: {
+                        isShowingPopover = false
+                        editorMode = .rename(group)
+                    },
+                    onDelete: {
+                        isShowingPopover = false
+                        groupPendingDelete = group
+                    }
+                )
             }
             if !groupStore.groups.isEmpty {
                 Divider()
                     .padding(.vertical, UIMetrics.spacing1)
             }
             newWorkspaceButton
-            if isCreatingNew {
-                newWorkspaceField
-            }
         }
         .padding(UIMetrics.spacing3)
         .frame(minWidth: 180)
@@ -133,57 +159,19 @@ struct WorkspaceSwitcher: View {
         .buttonStyle(.plain)
     }
 
-    @ViewBuilder
-    private func workspacePopoverRow(_ group: ProjectGroup) -> some View {
-        if isRenamingID == group.id {
-            renameField(for: group)
-        } else {
-            workspaceSelectRow(group)
-        }
-    }
-
-    private func workspaceSelectRow(_ group: ProjectGroup) -> some View {
-        WorkspaceRow(
-            group: group,
-            isActive: groupStore.activeGroupID == group.id,
-            onSelect: {
-                groupStore.selectGroup(id: group.id)
-                isShowingPopover = false
-            },
-            onRename: {
-                isRenamingID = group.id
-                renameText = group.name
-            },
-            onDelete: {
-                groupStore.removeGroup(id: group.id)
-            }
-        )
-    }
-
-    private func renameField(for group: ProjectGroup) -> some View {
-        TextField("Workspace name", text: $renameText)
-            .textFieldStyle(.plain)
-            .font(.system(size: UIMetrics.fontBody, weight: .medium))
-            .foregroundStyle(MuxyTheme.fg)
-            .padding(.horizontal, UIMetrics.spacing3)
-            .padding(.vertical, UIMetrics.spacing2)
-            .background(MuxyTheme.surface, in: RoundedRectangle(cornerRadius: UIMetrics.radiusMD))
-            .onSubmit { commitRename(id: group.id) }
-            .onExitCommand { cancelRename() }
-    }
-
     private var newWorkspaceButton: some View {
         Button {
-            isCreatingNew = true
-            newWorkspaceName = ""
+            isShowingPopover = false
+            editorMode = .create
         } label: {
             HStack(spacing: UIMetrics.spacing2) {
                 Image(systemName: "plus")
                     .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
-                    .foregroundStyle(MuxyTheme.fgMuted)
+                    .foregroundStyle(MuxyTheme.accent)
+                    .frame(width: UIMetrics.fontCaption)
                 Text("New Workspace")
                     .font(.system(size: UIMetrics.fontBody, weight: .medium))
-                    .foregroundStyle(MuxyTheme.fgMuted)
+                    .foregroundStyle(MuxyTheme.fg)
                 Spacer()
             }
             .padding(.horizontal, UIMetrics.spacing3)
@@ -193,48 +181,86 @@ struct WorkspaceSwitcher: View {
         .buttonStyle(.plain)
     }
 
-    private var newWorkspaceField: some View {
-        TextField("Workspace name", text: $newWorkspaceName)
-            .textFieldStyle(.plain)
-            .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
-            .foregroundStyle(MuxyTheme.fgMuted)
-            .padding(.horizontal, UIMetrics.spacing2)
-            .padding(.vertical, UIMetrics.spacing1)
-            .background(MuxyTheme.surface, in: RoundedRectangle(cornerRadius: UIMetrics.radiusMD))
-            .onSubmit { commitNewWorkspace() }
-            .onExitCommand { cancelNewWorkspace() }
+    private var deleteAlertBinding: Binding<Bool> {
+        Binding(
+            get: { groupPendingDelete != nil },
+            set: { newValue in
+                if !newValue {
+                    groupPendingDelete = nil
+                }
+            }
+        )
     }
 
-    private func commitRename(id: UUID) {
-        let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            cancelRename()
-            return
+    private func apply(mode: WorkspaceEditorMode, name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        switch mode {
+        case .create:
+            groupStore.addGroup(name: trimmed)
+        case let .rename(group):
+            groupStore.renameGroup(id: group.id, to: trimmed)
         }
-        groupStore.renameGroup(id: id, to: trimmed)
-        isRenamingID = nil
-        renameText = ""
     }
+}
 
-    private func cancelRename() {
-        isRenamingID = nil
-        renameText = ""
-    }
+enum WorkspaceEditorMode: Identifiable {
+    case create
+    case rename(ProjectGroup)
 
-    private func commitNewWorkspace() {
-        let trimmed = newWorkspaceName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            cancelNewWorkspace()
-            return
+    var id: String {
+        switch self {
+        case .create: "create"
+        case let .rename(group): "rename-\(group.id.uuidString)"
         }
-        groupStore.addGroup(name: trimmed)
-        isCreatingNew = false
-        newWorkspaceName = ""
     }
 
-    private func cancelNewWorkspace() {
-        isCreatingNew = false
-        newWorkspaceName = ""
+    var title: String {
+        switch self {
+        case .create: "New Workspace"
+        case .rename: "Rename Workspace"
+        }
+    }
+
+    var actionLabel: String {
+        switch self {
+        case .create: "Create"
+        case .rename: "Rename"
+        }
+    }
+
+    var initialName: String {
+        switch self {
+        case .create: ""
+        case let .rename(group): group.name
+        }
+    }
+}
+
+struct WorkspaceMembershipMenu: View {
+    let project: Project
+
+    @Environment(ProjectGroupStore.self) private var groupStore
+
+    var body: some View {
+        Menu("Move to Workspace") {
+            ForEach(groupStore.groups) { group in
+                let isInGroup = group.projectIDs.contains(project.id)
+                Button {
+                    if isInGroup {
+                        groupStore.removeProject(projectID: project.id, fromGroup: group.id)
+                    } else {
+                        groupStore.addProject(projectID: project.id, toGroup: group.id)
+                    }
+                } label: {
+                    if isInGroup {
+                        Label(group.name, systemImage: "checkmark")
+                    } else {
+                        Text(group.name)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -259,22 +285,6 @@ private struct WorkspaceRow: View {
                     .foregroundStyle(MuxyTheme.fg)
                     .lineLimit(1)
                 Spacer()
-                if isHovered {
-                    HStack(spacing: UIMetrics.spacing1) {
-                        Button(action: onRename) {
-                            Image(systemName: "pencil")
-                                .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
-                                .foregroundStyle(MuxyTheme.fgMuted)
-                        }
-                        .buttonStyle(.plain)
-                        Button(action: onDelete) {
-                            Image(systemName: "trash")
-                                .font(.system(size: UIMetrics.fontCaption, weight: .semibold))
-                                .foregroundStyle(MuxyTheme.fgMuted)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
             }
             .padding(.horizontal, UIMetrics.spacing3)
             .padding(.vertical, UIMetrics.spacing2)
@@ -283,5 +293,58 @@ private struct WorkspaceRow: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+        .contextMenu {
+            Button("Rename", action: onRename)
+            Button("Delete", role: .destructive, action: onDelete)
+        }
+    }
+}
+
+private struct WorkspaceEditorSheet: View {
+    let mode: WorkspaceEditorMode
+    let onSubmit: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var name: String = ""
+    @FocusState private var nameFocused: Bool
+
+    private var trimmed: String {
+        name.trimmingCharacters(in: .whitespaces)
+    }
+
+    private var canSubmit: Bool {
+        !trimmed.isEmpty
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UIMetrics.scaled(14)) {
+            Text(mode.title)
+                .font(.system(size: UIMetrics.fontHeadline, weight: .semibold))
+
+            VStack(alignment: .leading, spacing: UIMetrics.spacing3) {
+                Text("Workspace Name")
+                    .font(.system(size: UIMetrics.fontFootnote))
+                    .foregroundStyle(MuxyTheme.fgMuted)
+                TextField("Personal", text: $name)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($nameFocused)
+                    .onSubmit { if canSubmit { onSubmit(trimmed) } }
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+                Button(mode.actionLabel) { onSubmit(trimmed) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canSubmit)
+            }
+        }
+        .padding(UIMetrics.spacing8)
+        .frame(width: UIMetrics.scaled(360))
+        .onAppear {
+            name = mode.initialName
+            nameFocused = true
+        }
     }
 }

@@ -125,6 +125,20 @@ struct SidebarGroupTests {
         #expect(store.groups.first?.projectIDs.contains(projectID) == true)
     }
 
+    @Test("addProject removes project from other workspaces (single-membership)")
+    func addProjectIsExclusive() {
+        let projectID = UUID()
+        let groupA = ProjectGroup(name: "A", projectIDs: [projectID])
+        let groupB = ProjectGroup(name: "B")
+        let persistence = ProjectGroupPersistenceStub(initial: [groupA, groupB])
+        let store = ProjectGroupStore(persistence: persistence)
+
+        store.addProject(projectID: projectID, toGroup: groupB.id)
+
+        #expect(store.groups.first(where: { $0.id == groupA.id })?.projectIDs.contains(projectID) == false)
+        #expect(store.groups.first(where: { $0.id == groupB.id })?.projectIDs.contains(projectID) == true)
+    }
+
     @Test("filteredProjects after workspace selection only shows workspace projects")
     func filteredProjectsAfterSelection() {
         let projectA = Project(name: "A", path: "/a")

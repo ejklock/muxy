@@ -52,8 +52,12 @@ final class ProjectGroupStore {
 
     func addProject(projectID: UUID, toGroup groupID: UUID) {
         guard let index = groups.firstIndex(where: { $0.id == groupID }) else { return }
-        guard !groups[index].projectIDs.contains(projectID) else { return }
-        groups[index].projectIDs.append(projectID)
+        for otherIndex in groups.indices where otherIndex != index {
+            groups[otherIndex].projectIDs.removeAll { $0 == projectID }
+        }
+        if !groups[index].projectIDs.contains(projectID) {
+            groups[index].projectIDs.append(projectID)
+        }
         save()
     }
 
